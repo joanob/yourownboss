@@ -7,11 +7,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/joho/godotenv"
 
 	"yourownboss/internal/auth"
 	"yourownboss/internal/db"
@@ -21,6 +23,11 @@ import (
 )
 
 func main() {
+	// Load .env file
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found, using defaults and flags")
+	}
+
 	// Parse flags
 	var (
 		port      = flag.String("port", "8080", "Server port")
@@ -37,6 +44,17 @@ func main() {
 		log.Println("WARNING: Using default JWT secret. Set -jwt-secret in production!")
 	}
 
+	// Get initial company money from environment
+	initialMoney := int64(50000000) // Default: 50,000.000 in thousandths
+	if envMoney := os.Getenv("INITIAL_COMPANY_MONEY"); envMoney != "" {
+		if parsed, err := strconv.ParseInt(envMoney, 10, 64); err == nil {
+			initialMoney = parsed
+			log.Printf("Initial company money set to: %d (from .env)", initialMoney)
+		} else {
+			log.Printf("WARNING: Invalid INITIAL_COMPANY_MONEY value, using default: %d", initialMoney)
+		}
+	}
+
 	// Open database
 	database, err := db.Open(*dbPath)
 	if err != nil {
@@ -50,12 +68,15 @@ func main() {
 	// Repository layer
 	userRepo := repository.NewUserRepository(database)
 	tokenRepo := repository.NewTokenRepository(database)
+	companyRepo := repository.NewCompanyRepository(database)
 
 	// Service layer
 	authService := service.NewAuthService(userRepo, tokenRepo)
+	companyService := service.NewCompanyService(companyRepo, initialMoney)
 
 	// Handler/Controller layer
 	authHandler := httpHandlers.NewAuthHandler(authService)
+	companyHandler := httpHandlers.NewCompanyHandler(companyService)
 
 	// Setup router
 	r := chi.NewRouter()
@@ -89,6 +110,10 @@ func main() {
 		r.Group(func(r chi.Router) {
 			r.Use(auth.RequireAuth)
 			r.Get("/auth/me", authHandler.Me)
+
+			// Company routes
+			r.Post("/companies", companyHandler.CreateCompany)
+			r.Get("/companies/me", companyHandler.GetMyCompany)
 		})
 	})
 

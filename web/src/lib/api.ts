@@ -69,4 +69,30 @@ api.interceptors.response.use(
   }
 );
 
+// Types
+export interface Company {
+  id: number;
+  user_id: number;
+  name: string;
+  money: number; // int64 in thousandths
+  created_at: string;
+  updated_at: string;
+}
+
+// API functions
+export const authAPI = {
+  register: (username: string, password: string) =>
+    api.post('/auth/register', { username, password }),
+  login: (username: string, password: string) =>
+    api.post('/auth/login', { username, password }),
+  logout: () => api.post('/auth/logout'),
+  me: () => api.get('/auth/me'),
+  refresh: () => api.post('/auth/refresh'),
+};
+
+export const companyAPI = {
+  getMyCompany: () => api.get<Company>('/companies/me'),
+  createCompany: (name: string) => api.post<Company>('/companies', { name }),
+};
+
 export default api;
