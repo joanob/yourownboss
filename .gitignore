@@ -1,0 +1,39 @@
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+go.work.sum
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
+
+# Node
+node_modules/
+dist/
+*.log
+
+# Build outputs
+server/public/
+yourownboss.exe
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
