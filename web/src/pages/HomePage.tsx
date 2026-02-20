@@ -1,47 +1,12 @@
-import { useEffect, useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
-import { companyAPI } from '@/lib/api';
-import type { Company } from '@/lib/api';
+import { useCompany } from '@/contexts/CompanyContext';
 import { CreateCompanyForm } from '@/components/CreateCompanyForm';
-import { formatMoney } from '@/lib/money';
+import { GameLayout } from '@/components/GameLayout';
 
 export function HomePage() {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
-  const [company, setCompany] = useState<Company | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [hasCompany, setHasCompany] = useState(false);
+  const { company, loading, hasCompany, setCompany } = useCompany();
 
-  useEffect(() => {
-    checkCompany();
-  }, []);
-
-  const checkCompany = async () => {
-    try {
-      const response = await companyAPI.getMyCompany();
-      setCompany(response.data);
-      setHasCompany(true);
-    } catch (err: any) {
-      if (err.response?.status === 404) {
-        // User doesn't have a company yet
-        setHasCompany(false);
-      } else {
-        console.error('Error checking company:', err);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCompanyCreated = (newCompany: Company) => {
+  const handleCompanyCreated = (newCompany: any) => {
     setCompany(newCompany);
-    setHasCompany(true);
-  };
-
-  const handleLogout = async () => {
-    await logout();
-    navigate('/login');
   };
 
   if (loading) {
@@ -52,97 +17,117 @@ export function HomePage() {
           justifyContent: 'center',
           alignItems: 'center',
           height: '100vh',
+          backgroundColor: '#f5f5f5',
         }}
       >
-        <div style={{ fontSize: '18px', color: '#666' }}>Loading...</div>
+        <div style={{ fontSize: '18px', color: '#666' }}>Cargando...</div>
       </div>
     );
   }
 
   // If user doesn't have a company, force them to create one
   if (!hasCompany) {
-    return (
-      <div>
-        <CreateCompanyForm onCompanyCreated={handleCompanyCreated} />
-      </div>
-    );
+    return <CreateCompanyForm onCompanyCreated={handleCompanyCreated} />;
   }
 
-  // User has a company, show the dashboard
+  // User has a company, show the game
   return (
-    <div style={{ maxWidth: '800px', margin: '50px auto', padding: '20px' }}>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '30px',
-        }}
-      >
-        <h1>Your Own Boss</h1>
-        <div>
-          <span style={{ marginRight: '15px' }}>
-            Welcome, {user?.username}!
-          </span>
-          <button
-            onClick={handleLogout}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#dc3545',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-            }}
-          >
-            Logout
-          </button>
-        </div>
-      </div>
-
-      {company && (
+    <GameLayout>
+      <div style={{ padding: '16px' }}>
+        {/* Welcome card */}
         <div
           style={{
-            padding: '20px',
             backgroundColor: '#ffffff',
             borderRadius: '8px',
-            marginBottom: '20px',
+            padding: '16px',
+            marginBottom: '16px',
             boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
           }}
         >
-          <h2 style={{ marginBottom: '15px' }}>{company.name}</h2>
-          <div
+          <h2 style={{ margin: '0 0 8px 0', fontSize: '18px', color: '#333' }}>
+            Bienvenido 👋
+          </h2>
+          <p
             style={{
-              display: 'flex',
-              alignItems: 'baseline',
-              gap: '10px',
+              margin: 0,
+              fontSize: '14px',
+              color: '#666',
+              lineHeight: '1.5',
             }}
           >
-            <span style={{ fontSize: '14px', color: '#666' }}>Balance:</span>
-            <span
-              style={{
-                fontSize: '24px',
-                fontWeight: 'bold',
-                color: '#28a745',
-              }}
+            Tu empresa está lista para empezar a producir y gestionar recursos.
+          </p>
+        </div>
+
+        {/* Quick stats */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '12px',
+            marginBottom: '16px',
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#ffffff',
+              borderRadius: '8px',
+              padding: '16px',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            }}
+          >
+            <div
+              style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}
             >
-              ${formatMoney(company.money)}
-            </span>
+              Producción
+            </div>
+            <div
+              style={{ fontSize: '20px', fontWeight: 'bold', color: '#333' }}
+            >
+              0
+            </div>
+          </div>
+          <div
+            style={{
+              backgroundColor: '#ffffff',
+              borderRadius: '8px',
+              padding: '16px',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            }}
+          >
+            <div
+              style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}
+            >
+              Recursos
+            </div>
+            <div
+              style={{ fontSize: '20px', fontWeight: 'bold', color: '#333' }}
+            >
+              0
+            </div>
           </div>
         </div>
-      )}
 
-      <div
-        style={{
-          padding: '20px',
-          backgroundColor: '#f8f9fa',
-          borderRadius: '8px',
-        }}
-      >
-        <h2>Dashboard</h2>
-        <p>Welcome to Your Own Boss! This is where your game will start.</p>
-        <p>Your company is ready. Game features coming soon!</p>
+        {/* Coming soon */}
+        <div
+          style={{
+            backgroundColor: '#fff9e6',
+            border: '1px solid #ffd700',
+            borderRadius: '8px',
+            padding: '16px',
+            textAlign: 'center',
+          }}
+        >
+          <span
+            style={{ fontSize: '32px', display: 'block', marginBottom: '8px' }}
+          >
+            🚧
+          </span>
+          <div style={{ fontSize: '14px', color: '#856404', fontWeight: 500 }}>
+            Próximamente: Sistema de producción y recursos
+          </div>
+        </div>
       </div>
-    </div>
+    </GameLayout>
   );
 }
