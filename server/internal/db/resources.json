@@ -1,0 +1,6 @@
+[
+  { "name": "Wood", "price": 1000, "pack_size": 1 },
+  { "name": "Stone", "price": 1500, "pack_size": 1 },
+  { "name": "Iron", "price": 3500, "pack_size": 1 },
+  { "name": "Food", "price": 800, "pack_size": 5 }
+]

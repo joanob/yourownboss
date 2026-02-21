@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -30,10 +32,11 @@ func main() {
 
 	// Parse flags
 	var (
-		port      = flag.String("port", "8080", "Server port")
-		dbPath    = flag.String("db", "yourownboss.db", "Database file path")
-		jwtSecret = flag.String("jwt-secret", "", "JWT secret key (if empty, uses default)")
-		staticDir = flag.String("static", "../public", "Static files directory")
+		port          = flag.String("port", "8080", "Server port")
+		dbPath        = flag.String("db", "yourownboss.db", "Database file path")
+		jwtSecret     = flag.String("jwt-secret", "", "JWT secret key (if empty, uses default)")
+		staticDir     = flag.String("static", "../public", "Static files directory")
+		resourcesFile = flag.String("resources", "data/resources.json", "Resources JSON file")
 	)
 	flag.Parse()
 
@@ -73,6 +76,10 @@ func main() {
 	companyRepo := repository.NewCompanyRepository(database)
 	resourceRepo := repository.NewResourceRepository(database)
 	inventoryRepo := repository.NewInventoryRepository(database)
+
+	if err := loadResourcesFromFile(context.Background(), resourceRepo, *resourcesFile); err != nil {
+		log.Printf("Warning: failed to load resources: %v", err)
+	}
 
 	// Service layer
 	authService := service.NewAuthService(userRepo, tokenRepo)
@@ -165,4 +172,60 @@ func main() {
 	if err := http.ListenAndServe(addr, r); err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
+}
+
+type resourceSeed struct {
+	ID       int64  `json:"id"`
+	Name     string `json:"name"`
+	Price    int64  `json:"price"`
+	PackSize int64  `json:"pack_size"`
+}
+
+func loadResourcesFromFile(ctx context.Context, repo repository.ResourceRepository, path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
+	var seeds []resourceSeed
+	if err := json.Unmarshal(data, &seeds); err != nil {
+		return err
+	}
+
+	created := 0
+	updated := 0
+	for _, seed := range seeds {
+		if seed.ID <= 0 || seed.Name == "" {
+			continue
+		}
+		if seed.PackSize <= 0 {
+			seed.PackSize = 1
+		}
+
+		existing, err := repo.GetByID(ctx, seed.ID)
+		if err != nil {
+			if err == repository.ErrResourceNotFound {
+				if _, err := repo.Create(ctx, seed.ID, seed.Name, seed.Price, seed.PackSize); err != nil {
+					return err
+				}
+				created++
+				continue
+			}
+			return err
+		}
+
+		if _, err := repo.Update(ctx, existing.ID, seed.Name, seed.Price, seed.PackSize); err != nil {
+			return err
+		}
+		updated++
+	}
+
+	if created > 0 {
+		log.Printf("Resources loaded: %d", created)
+	}
+	if updated > 0 {
+		log.Printf("Resources updated: %d", updated)
+	}
+
+	return nil
 }

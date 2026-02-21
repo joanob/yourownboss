@@ -38,8 +38,8 @@ CREATE TABLE IF NOT EXISTS companies (
 CREATE INDEX IF NOT EXISTS idx_companies_user_id ON companies(user_id);
 -- Resources table (available resources in the game)
 CREATE TABLE IF NOT EXISTS resources (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
     price INTEGER NOT NULL, -- Price in thousandths for pack_size units
     pack_size INTEGER NOT NULL DEFAULT 1, -- Number of units per pack
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP

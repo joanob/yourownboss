@@ -18,7 +18,8 @@ var (
 type ResourceRepository interface {
 	GetByID(ctx context.Context, id int64) (*db.Resource, error)
 	GetAll(ctx context.Context) ([]db.Resource, error)
-	Create(ctx context.Context, name string, price int64, packSize int64) (*db.Resource, error)
+	Create(ctx context.Context, id int64, name string, price int64, packSize int64) (*db.Resource, error)
+	Update(ctx context.Context, id int64, name string, price int64, packSize int64) (*db.Resource, error)
 }
 
 // InventoryRepository handles company inventory data access
@@ -84,17 +85,25 @@ func (r *resourceRepository) GetAll(ctx context.Context) ([]db.Resource, error) 
 	return resources, nil
 }
 
-func (r *resourceRepository) Create(ctx context.Context, name string, price int64, packSize int64) (*db.Resource, error) {
-	result, err := r.db.ExecContext(
+func (r *resourceRepository) Create(ctx context.Context, id int64, name string, price int64, packSize int64) (*db.Resource, error) {
+	_, err := r.db.ExecContext(
 		ctx,
-		`INSERT INTO resources (name, price, pack_size) VALUES (?, ?, ?)`,
-		name, price, packSize,
+		`INSERT INTO resources (id, name, price, pack_size) VALUES (?, ?, ?, ?)`,
+		id, name, price, packSize,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	id, err := result.LastInsertId()
+	return r.GetByID(ctx, id)
+}
+
+func (r *resourceRepository) Update(ctx context.Context, id int64, name string, price int64, packSize int64) (*db.Resource, error) {
+	_, err := r.db.ExecContext(
+		ctx,
+		`UPDATE resources SET name = ?, price = ?, pack_size = ? WHERE id = ?`,
+		name, price, packSize, id,
+	)
 	if err != nil {
 		return nil, err
 	}
