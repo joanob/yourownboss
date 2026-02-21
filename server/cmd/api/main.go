@@ -101,12 +101,19 @@ func main() {
 	companyService := service.NewCompanyService(companyRepo, initialMoney)
 	inventoryService := service.NewInventoryService(resourceRepo, inventoryRepo)
 	marketService := service.NewMarketService(resourceRepo, companyRepo, inventoryRepo)
+	productionService := service.NewProductionService(
+		productionBuildingRepo,
+		productionProcessRepo,
+		processResourceRepo,
+		resourceRepo,
+	)
 
 	// Handler/Controller layer
 	authHandler := httpHandlers.NewAuthHandler(authService)
 	companyHandler := httpHandlers.NewCompanyHandler(companyService)
 	inventoryHandler := httpHandlers.NewInventoryHandler(inventoryService, companyRepo)
 	marketHandler := httpHandlers.NewMarketHandler(marketService, companyRepo)
+	productionHandler := httpHandlers.NewProductionHandler(productionService)
 
 	// Setup router
 	r := chi.NewRouter()
@@ -137,6 +144,7 @@ func main() {
 
 		// Public inventory routes
 		r.Get("/resources", inventoryHandler.GetResources)
+		r.Get("/production-buildings", productionHandler.GetProductionBuildings)
 
 		// Protected routes
 		r.Group(func(r chi.Router) {
