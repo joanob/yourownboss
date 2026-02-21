@@ -64,6 +64,20 @@ CREATE TABLE IF NOT EXISTS production_processes (
 
 CREATE INDEX IF NOT EXISTS idx_production_processes_building_id ON production_processes(building_id);
 
+-- Production process resources table (inputs and outputs for processes)
+CREATE TABLE IF NOT EXISTS production_process_resources (
+    process_id INTEGER NOT NULL,
+    resource_id INTEGER NOT NULL,
+    direction TEXT NOT NULL,
+    quantity INTEGER NOT NULL,
+    PRIMARY KEY (process_id, resource_id, direction),
+    FOREIGN KEY (process_id) REFERENCES production_processes(id) ON DELETE CASCADE,
+    FOREIGN KEY (resource_id) REFERENCES resources(id) ON DELETE CASCADE,
+    CHECK (direction IN ('input', 'output'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_process_resources_process_id ON production_process_resources(process_id);
+
 -- Company inventory table (resources owned by companies)
 CREATE TABLE IF NOT EXISTS company_inventory (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

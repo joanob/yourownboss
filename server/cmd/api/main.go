@@ -79,12 +79,20 @@ func main() {
 	inventoryRepo := repository.NewInventoryRepository(database)
 	productionBuildingRepo := repository.NewProductionBuildingRepository(database)
 	productionProcessRepo := repository.NewProductionProcessRepository(database)
+	processResourceRepo := repository.NewProductionProcessResourceRepository(database)
 
 	if err := loadResourcesFromFile(context.Background(), resourceRepo, *resourcesFile); err != nil {
 		log.Printf("Warning: failed to load resources: %v", err)
 	}
 
-	if err := loadProductionBuildingsFromFile(context.Background(), productionBuildingRepo, productionProcessRepo, *buildingsFile); err != nil {
+	if err := loadProductionBuildingsFromFile(
+		context.Background(),
+		productionBuildingRepo,
+		productionProcessRepo,
+		processResourceRepo,
+		resourceRepo,
+		*buildingsFile,
+	); err != nil {
 		log.Printf("Warning: failed to load production buildings: %v", err)
 	}
 
@@ -193,6 +201,13 @@ type productionProcessSeed struct {
 	Name             string                    `json:"name"`
 	ProcessingTimeMs int64                     `json:"processing_time_ms"`
 	TimeWindow       *productionTimeWindowSeed `json:"time_window"`
+	Resources        []processResourceSeed     `json:"resources"`
+}
+
+type processResourceSeed struct {
+	ResourceID int64  `json:"resource_id"`
+	Direction  string `json:"direction"`
+	Quantity   int64  `json:"quantity"`
 }
 
 type productionTimeWindowSeed struct {
@@ -204,6 +219,8 @@ func loadProductionBuildingsFromFile(
 	ctx context.Context,
 	buildingRepo repository.ProductionBuildingRepository,
 	processRepo repository.ProductionProcessRepository,
+	processResourceRepo repository.ProductionProcessResourceRepository,
+	resourceRepo repository.ResourceRepository,
 	path string,
 ) error {
 	data, err := os.ReadFile(path)
@@ -220,6 +237,9 @@ func loadProductionBuildingsFromFile(
 	updated := 0
 	processesCreated := 0
 	processesUpdated := 0
+	processResourcesCreated := 0
+	processResourcesUpdated := 0
+	processResourcesDeleted := 0
 	for _, seed := range seeds {
 		if seed.ID <= 0 || seed.Name == "" {
 			continue
@@ -278,23 +298,88 @@ func loadProductionBuildingsFromFile(
 						return err
 					}
 					processesCreated++
-					continue
+				} else {
+					return err
 				}
+			} else {
+				if _, err := processRepo.Update(
+					ctx,
+					existingProcess.ID,
+					processSeed.Name,
+					processSeed.ProcessingTimeMs,
+					seed.ID,
+					windowStartHour,
+					windowEndHour,
+				); err != nil {
+					return err
+				}
+				processesUpdated++
+			}
+
+			existingResources, err := processResourceRepo.GetAllByProcess(ctx, processSeed.ID)
+			if err != nil {
 				return err
 			}
 
-			if _, err := processRepo.Update(
-				ctx,
-				existingProcess.ID,
-				processSeed.Name,
-				processSeed.ProcessingTimeMs,
-				seed.ID,
-				windowStartHour,
-				windowEndHour,
-			); err != nil {
-				return err
+			existingByKey := make(map[string]db.ProductionProcessResource, len(existingResources))
+			for _, existingResource := range existingResources {
+				key := fmt.Sprintf("%d|%s", existingResource.ResourceID, existingResource.Direction)
+				existingByKey[key] = existingResource
 			}
-			processesUpdated++
+
+			seen := make(map[string]struct{}, len(processSeed.Resources))
+			for _, resourceSeed := range processSeed.Resources {
+				if resourceSeed.ResourceID <= 0 || resourceSeed.Quantity <= 0 {
+					continue
+				}
+				if resourceSeed.Direction != "input" && resourceSeed.Direction != "output" {
+					continue
+				}
+
+				if _, err := resourceRepo.GetByID(ctx, resourceSeed.ResourceID); err != nil {
+					if err == repository.ErrResourceNotFound {
+						continue
+					}
+					return err
+				}
+
+				key := fmt.Sprintf("%d|%s", resourceSeed.ResourceID, resourceSeed.Direction)
+				if existing, ok := existingByKey[key]; ok {
+					if existing.Quantity != resourceSeed.Quantity {
+						processResourcesUpdated++
+					}
+				} else {
+					processResourcesCreated++
+				}
+
+				if err := processResourceRepo.Upsert(
+					ctx,
+					processSeed.ID,
+					resourceSeed.ResourceID,
+					resourceSeed.Direction,
+					resourceSeed.Quantity,
+				); err != nil {
+					return err
+				}
+				seen[key] = struct{}{}
+			}
+
+			for _, existingResource := range existingResources {
+				key := fmt.Sprintf("%d|%s", existingResource.ResourceID, existingResource.Direction)
+				if _, ok := seen[key]; ok {
+					continue
+				}
+				if err := processResourceRepo.Delete(
+					ctx,
+					existingResource.ProcessID,
+					existingResource.ResourceID,
+					existingResource.Direction,
+				); err != nil {
+					return err
+				}
+				processResourcesDeleted++
+			}
+
 		}
 	}
 
@@ -309,6 +394,15 @@ func loadProductionBuildingsFromFile(
 	}
 	if processesUpdated > 0 {
 		log.Printf("Production processes updated: %d", processesUpdated)
+	}
+	if processResourcesCreated > 0 {
+		log.Printf("Production process resources loaded: %d", processResourcesCreated)
+	}
+	if processResourcesUpdated > 0 {
+		log.Printf("Production process resources updated: %d", processResourcesUpdated)
+	}
+	if processResourcesDeleted > 0 {
+		log.Printf("Production process resources removed: %d", processResourcesDeleted)
 	}
 
 	return nil
