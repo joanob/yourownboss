@@ -34,6 +34,9 @@ export function GameLayout({ children }: GameLayoutProps) {
       {company && (
         <header
           style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 10,
             backgroundColor: '#ffffff',
             borderBottom: '1px solid #e0e0e0',
             padding: '12px 16px',
@@ -114,8 +117,10 @@ export function GameLayout({ children }: GameLayoutProps) {
       <main
         style={{
           flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: 0,
           overflowY: 'auto',
-          paddingBottom: '70px', // Space for bottom nav
         }}
       >
         {children}

@@ -192,7 +192,7 @@ export function InventoryPage() {
 
   return (
     <GameLayout>
-      <div style={{ padding: '16px' }}>
+      <div style={{ padding: '16px 16px 96px' }}>
         <h1 style={{ marginBottom: '16px', fontSize: '24px', fontWeight: 600 }}>
           📦 Inventario
         </h1>
