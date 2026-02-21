@@ -39,19 +39,16 @@ type InventoryItemResponse struct {
 	ID         int64  `json:"id"`
 	ResourceID int64  `json:"resource_id"`
 	Name       string `json:"name"`
-	Icon       string `json:"icon"`
 	Quantity   int64  `json:"quantity"`
 	Price      int64  `json:"price"`     // Price per pack
 	PackSize   int64  `json:"pack_size"` // Units per pack
 }
 
 type ResourceResponse struct {
-	ID          int64  `json:"id"`
-	Name        string `json:"name"`
-	Icon        string `json:"icon"`
-	Description string `json:"description"`
-	Price       int64  `json:"price"`     // Price per pack
-	PackSize    int64  `json:"pack_size"` // Units per pack
+	ID       int64  `json:"id"`
+	Name     string `json:"name"`
+	Price    int64  `json:"price"`     // Price per pack
+	PackSize int64  `json:"pack_size"` // Units per pack
 }
 
 type BuyRequest struct {
@@ -98,7 +95,6 @@ func (h *InventoryHandler) GetInventory(w http.ResponseWriter, r *http.Request) 
 			ID:         item.ID,
 			ResourceID: item.ResourceID,
 			Name:       item.Name,
-			Icon:       item.Icon,
 			Quantity:   item.Quantity,
 			Price:      item.Price,
 			PackSize:   item.PackSize,
@@ -121,12 +117,10 @@ func (h *InventoryHandler) GetResources(w http.ResponseWriter, r *http.Request) 
 	response := make([]ResourceResponse, 0)
 	for _, res := range resources {
 		response = append(response, ResourceResponse{
-			ID:          res.ID,
-			Name:        res.Name,
-			Icon:        res.Icon,
-			Description: res.Description,
-			Price:       res.Price,
-			PackSize:    res.PackSize,
+			ID:       res.ID,
+			Name:     res.Name,
+			Price:    res.Price,
+			PackSize: res.PackSize,
 		})
 	}
 

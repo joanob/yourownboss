@@ -40,8 +40,6 @@ CREATE INDEX IF NOT EXISTS idx_companies_user_id ON companies(user_id);
 CREATE TABLE IF NOT EXISTS resources (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
-    icon TEXT NOT NULL,
-    description TEXT,
     price INTEGER NOT NULL, -- Price in thousandths for pack_size units
     pack_size INTEGER NOT NULL DEFAULT 1, -- Number of units per pack
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP

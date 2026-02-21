@@ -4,8 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
-	"log"
 
 	"yourownboss/internal/db"
 )
@@ -20,7 +18,7 @@ var (
 type ResourceRepository interface {
 	GetByID(ctx context.Context, id int64) (*db.Resource, error)
 	GetAll(ctx context.Context) ([]db.Resource, error)
-	Create(ctx context.Context, name, icon, description string, price int64, packSize int64) (*db.Resource, error)
+	Create(ctx context.Context, name string, price int64, packSize int64) (*db.Resource, error)
 }
 
 // InventoryRepository handles company inventory data access
@@ -44,13 +42,14 @@ func NewResourceRepository(database *db.DB) ResourceRepository {
 }
 
 func (r *resourceRepository) GetByID(ctx context.Context, id int64) (*db.Resource, error) {
-	row := r.db.QueryRow(
-		`SELECT id, name, icon, description, price, pack_size, created_at FROM resources WHERE id = ?`,
+	row := r.db.QueryRowContext(
+		ctx,
+		`SELECT id, name, price, pack_size, created_at FROM resources WHERE id = ?`,
 		id,
 	)
 
 	var resource db.Resource
-	if err := row.Scan(&resource.ID, &resource.Name, &resource.Icon, &resource.Description, &resource.Price, &resource.PackSize, &resource.CreatedAt); err != nil {
+	if err := row.Scan(&resource.ID, &resource.Name, &resource.Price, &resource.PackSize, &resource.CreatedAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrResourceNotFound
 		}
@@ -61,45 +60,35 @@ func (r *resourceRepository) GetByID(ctx context.Context, id int64) (*db.Resourc
 }
 
 func (r *resourceRepository) GetAll(ctx context.Context) ([]db.Resource, error) {
-	query := `SELECT id, name, icon, description, price, pack_size, created_at FROM resources`
-	log.Printf("DEBUG: Executing query: %s", query)
+	query := `SELECT id, name, price, pack_size, created_at FROM resources`
 
-	rows, err := r.db.Query(query)
+	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
-		log.Printf("ERROR: Query failed: %v", err)
-		return nil, fmt.Errorf("query error: %w", err)
+		return nil, err
 	}
 	defer rows.Close()
 
 	var resources []db.Resource
-	rowCount := 0
-
 	for rows.Next() {
-		rowCount++
 		var resource db.Resource
-		if err := rows.Scan(&resource.ID, &resource.Name, &resource.Icon, &resource.Description, &resource.Price, &resource.PackSize, &resource.CreatedAt); err != nil {
-			log.Printf("ERROR: Scan failed on row %d: %v", rowCount, err)
-			return nil, fmt.Errorf("scan error: %w", err)
+		if err := rows.Scan(&resource.ID, &resource.Name, &resource.Price, &resource.PackSize, &resource.CreatedAt); err != nil {
+			return nil, err
 		}
-		log.Printf("DEBUG: Scanned row %d: ID=%d, Name=%s", rowCount, resource.ID, resource.Name)
 		resources = append(resources, resource)
 	}
 
-	log.Printf("DEBUG: Total rows scanned: %d", rowCount)
-
 	if err := rows.Err(); err != nil {
-		log.Printf("ERROR: rows.Err(): %v", err)
-		return nil, fmt.Errorf("rows error: %w", err)
+		return nil, err
 	}
 
-	log.Printf("DEBUG: Returning %d resources", len(resources))
 	return resources, nil
 }
 
-func (r *resourceRepository) Create(ctx context.Context, name, icon, description string, price int64, packSize int64) (*db.Resource, error) {
-	result, err := r.db.Exec(
-		`INSERT INTO resources (name, icon, description, price, pack_size) VALUES (?, ?, ?, ?, ?)`,
-		name, icon, description, price, packSize,
+func (r *resourceRepository) Create(ctx context.Context, name string, price int64, packSize int64) (*db.Resource, error) {
+	result, err := r.db.ExecContext(
+		ctx,
+		`INSERT INTO resources (name, price, pack_size) VALUES (?, ?, ?)`,
+		name, price, packSize,
 	)
 	if err != nil {
 		return nil, err
@@ -124,7 +113,8 @@ func NewInventoryRepository(database *db.DB) InventoryRepository {
 }
 
 func (i *inventoryRepository) GetByCompanyAndResource(ctx context.Context, companyID, resourceID int64) (*db.CompanyInventory, error) {
-	row := i.db.QueryRow(
+	row := i.db.QueryRowContext(
+		ctx,
 		`SELECT id, company_id, resource_id, quantity, created_at, updated_at FROM company_inventory WHERE company_id = ? AND resource_id = ?`,
 		companyID, resourceID,
 	)
@@ -141,7 +131,8 @@ func (i *inventoryRepository) GetByCompanyAndResource(ctx context.Context, compa
 }
 
 func (i *inventoryRepository) GetAllByCompany(ctx context.Context, companyID int64) ([]db.CompanyInventory, error) {
-	rows, err := i.db.Query(
+	rows, err := i.db.QueryContext(
+		ctx,
 		`SELECT id, company_id, resource_id, quantity, created_at, updated_at FROM company_inventory WHERE company_id = ? ORDER BY resource_id`,
 		companyID,
 	)
@@ -163,8 +154,9 @@ func (i *inventoryRepository) GetAllByCompany(ctx context.Context, companyID int
 }
 
 func (i *inventoryRepository) GetAllByCompanyWithDetails(ctx context.Context, companyID int64) ([]db.InventoryWithDetails, error) {
-	rows, err := i.db.Query(
-		`SELECT ci.id, ci.resource_id, r.name, r.icon, ci.quantity, r.price, r.pack_size
+	rows, err := i.db.QueryContext(
+		ctx,
+		`SELECT ci.id, ci.resource_id, r.name, ci.quantity, r.price, r.pack_size
 		 FROM company_inventory ci
 		 JOIN resources r ON ci.resource_id = r.id
 		 WHERE ci.company_id = ?
@@ -179,7 +171,7 @@ func (i *inventoryRepository) GetAllByCompanyWithDetails(ctx context.Context, co
 	var details []db.InventoryWithDetails
 	for rows.Next() {
 		var item db.InventoryWithDetails
-		if err := rows.Scan(&item.ID, &item.ResourceID, &item.Name, &item.Icon, &item.Quantity, &item.Price, &item.PackSize); err != nil {
+		if err := rows.Scan(&item.ID, &item.ResourceID, &item.Name, &item.Quantity, &item.Price, &item.PackSize); err != nil {
 			return nil, err
 		}
 		details = append(details, item)
@@ -189,7 +181,8 @@ func (i *inventoryRepository) GetAllByCompanyWithDetails(ctx context.Context, co
 }
 
 func (i *inventoryRepository) AddItem(ctx context.Context, companyID, resourceID int64, quantity int64) error {
-	_, err := i.db.Exec(
+	_, err := i.db.ExecContext(
+		ctx,
 		`INSERT INTO company_inventory (company_id, resource_id, quantity, updated_at)
 		 VALUES (?, ?, ?, CURRENT_TIMESTAMP)
 		 ON CONFLICT(company_id, resource_id) DO UPDATE SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP`,
@@ -212,7 +205,8 @@ func (i *inventoryRepository) RemoveItem(ctx context.Context, companyID, resourc
 		return ErrInsufficientStock
 	}
 
-	_, err = i.db.Exec(
+	_, err = i.db.ExecContext(
+		ctx,
 		`UPDATE company_inventory SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP WHERE company_id = ? AND resource_id = ?`,
 		quantity, companyID, resourceID,
 	)
@@ -224,7 +218,8 @@ func (i *inventoryRepository) SetQuantity(ctx context.Context, companyID, resour
 		return errors.New("quantity cannot be negative")
 	}
 
-	_, err := i.db.Exec(
+	_, err := i.db.ExecContext(
+		ctx,
 		`INSERT INTO company_inventory (company_id, resource_id, quantity, updated_at)
 		 VALUES (?, ?, ?, CURRENT_TIMESTAMP)
 		 ON CONFLICT(company_id, resource_id) DO UPDATE SET quantity = ?, updated_at = CURRENT_TIMESTAMP`,
