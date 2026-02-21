@@ -78,12 +78,13 @@ func main() {
 	resourceRepo := repository.NewResourceRepository(database)
 	inventoryRepo := repository.NewInventoryRepository(database)
 	productionBuildingRepo := repository.NewProductionBuildingRepository(database)
+	productionProcessRepo := repository.NewProductionProcessRepository(database)
 
 	if err := loadResourcesFromFile(context.Background(), resourceRepo, *resourcesFile); err != nil {
 		log.Printf("Warning: failed to load resources: %v", err)
 	}
 
-	if err := loadProductionBuildingsFromFile(context.Background(), productionBuildingRepo, *buildingsFile); err != nil {
+	if err := loadProductionBuildingsFromFile(context.Background(), productionBuildingRepo, productionProcessRepo, *buildingsFile); err != nil {
 		log.Printf("Warning: failed to load production buildings: %v", err)
 	}
 
@@ -181,12 +182,30 @@ func main() {
 }
 
 type productionBuildingSeed struct {
-	ID   int64  `json:"id"`
-	Name string `json:"name"`
-	Cost int64  `json:"cost"`
+	ID        int64                   `json:"id"`
+	Name      string                  `json:"name"`
+	Cost      int64                   `json:"cost"`
+	Processes []productionProcessSeed `json:"processes"`
 }
 
-func loadProductionBuildingsFromFile(ctx context.Context, repo repository.ProductionBuildingRepository, path string) error {
+type productionProcessSeed struct {
+	ID               int64                     `json:"id"`
+	Name             string                    `json:"name"`
+	ProcessingTimeMs int64                     `json:"processing_time_ms"`
+	TimeWindow       *productionTimeWindowSeed `json:"time_window"`
+}
+
+type productionTimeWindowSeed struct {
+	StartHour int64 `json:"start_hour"`
+	EndHour   int64 `json:"end_hour"`
+}
+
+func loadProductionBuildingsFromFile(
+	ctx context.Context,
+	buildingRepo repository.ProductionBuildingRepository,
+	processRepo repository.ProductionProcessRepository,
+	path string,
+) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -199,27 +218,84 @@ func loadProductionBuildingsFromFile(ctx context.Context, repo repository.Produc
 
 	created := 0
 	updated := 0
+	processesCreated := 0
+	processesUpdated := 0
 	for _, seed := range seeds {
 		if seed.ID <= 0 || seed.Name == "" {
 			continue
 		}
 
-		existing, err := repo.GetByID(ctx, seed.ID)
+		existing, err := buildingRepo.GetByID(ctx, seed.ID)
 		if err != nil {
 			if err == repository.ErrProductionBuildingNotFound {
-				if _, err := repo.Create(ctx, seed.ID, seed.Name, seed.Cost); err != nil {
+				if _, err := buildingRepo.Create(ctx, seed.ID, seed.Name, seed.Cost); err != nil {
 					return err
 				}
 				created++
-				continue
+			} else {
+				return err
 			}
-			return err
+		} else {
+			if _, err := buildingRepo.Update(ctx, existing.ID, seed.Name, seed.Cost); err != nil {
+				return err
+			}
+			updated++
 		}
 
-		if _, err := repo.Update(ctx, existing.ID, seed.Name, seed.Cost); err != nil {
-			return err
+		for _, processSeed := range seed.Processes {
+			if processSeed.ID <= 0 || processSeed.Name == "" || processSeed.ProcessingTimeMs <= 0 {
+				continue
+			}
+
+			var windowStartHour *int64
+			var windowEndHour *int64
+			if processSeed.TimeWindow != nil {
+				if processSeed.TimeWindow.StartHour < 0 || processSeed.TimeWindow.StartHour > 23 {
+					continue
+				}
+				if processSeed.TimeWindow.EndHour < 0 || processSeed.TimeWindow.EndHour > 23 {
+					continue
+				}
+				if processSeed.TimeWindow.StartHour >= processSeed.TimeWindow.EndHour {
+					continue
+				}
+				windowStartHour = &processSeed.TimeWindow.StartHour
+				windowEndHour = &processSeed.TimeWindow.EndHour
+			}
+
+			existingProcess, err := processRepo.GetByID(ctx, processSeed.ID)
+			if err != nil {
+				if err == repository.ErrProductionProcessNotFound {
+					if _, err := processRepo.Create(
+						ctx,
+						processSeed.ID,
+						processSeed.Name,
+						processSeed.ProcessingTimeMs,
+						seed.ID,
+						windowStartHour,
+						windowEndHour,
+					); err != nil {
+						return err
+					}
+					processesCreated++
+					continue
+				}
+				return err
+			}
+
+			if _, err := processRepo.Update(
+				ctx,
+				existingProcess.ID,
+				processSeed.Name,
+				processSeed.ProcessingTimeMs,
+				seed.ID,
+				windowStartHour,
+				windowEndHour,
+			); err != nil {
+				return err
+			}
+			processesUpdated++
 		}
-		updated++
 	}
 
 	if created > 0 {
@@ -227,6 +303,12 @@ func loadProductionBuildingsFromFile(ctx context.Context, repo repository.Produc
 	}
 	if updated > 0 {
 		log.Printf("Production buildings updated: %d", updated)
+	}
+	if processesCreated > 0 {
+		log.Printf("Production processes loaded: %d", processesCreated)
+	}
+	if processesUpdated > 0 {
+		log.Printf("Production processes updated: %d", processesUpdated)
 	}
 
 	return nil

@@ -2,5 +2,5 @@
   { "id": 1, "name": "Electricidad", "price": 1, "pack_size": 1 },
   { "id": 2, "name": "Agua", "price": 5, "pack_size": 3 },
   { "id": 3, "name": "Semillas", "price": 200, "pack_size": 1 },
-  { "id": 4, "name": "Naranjas", "price": 800, "pack_size": 1 }
+  { "id": 4, "name": "Tomates", "price": 800, "pack_size": 1 }
 ]

@@ -51,6 +51,19 @@ CREATE TABLE IF NOT EXISTS production_buildings (
     cost INTEGER NOT NULL
 );
 
+-- Production processes table (available production processes in the game)
+CREATE TABLE IF NOT EXISTS production_processes (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    processing_time_ms INTEGER NOT NULL,
+    building_id INTEGER NOT NULL,
+    window_start_hour INTEGER,
+    window_end_hour INTEGER,
+    FOREIGN KEY (building_id) REFERENCES production_buildings(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_production_processes_building_id ON production_processes(building_id);
+
 -- Company inventory table (resources owned by companies)
 CREATE TABLE IF NOT EXISTS company_inventory (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
