@@ -37,6 +37,7 @@ func main() {
 		jwtSecret     = flag.String("jwt-secret", "", "JWT secret key (if empty, uses default)")
 		staticDir     = flag.String("static", "../public", "Static files directory")
 		resourcesFile = flag.String("resources", "data/resources.json", "Resources JSON file")
+		buildingsFile = flag.String("production-buildings", "data/production_buildings.json", "Production buildings JSON file")
 	)
 	flag.Parse()
 
@@ -76,9 +77,14 @@ func main() {
 	companyRepo := repository.NewCompanyRepository(database)
 	resourceRepo := repository.NewResourceRepository(database)
 	inventoryRepo := repository.NewInventoryRepository(database)
+	productionBuildingRepo := repository.NewProductionBuildingRepository(database)
 
 	if err := loadResourcesFromFile(context.Background(), resourceRepo, *resourcesFile); err != nil {
 		log.Printf("Warning: failed to load resources: %v", err)
+	}
+
+	if err := loadProductionBuildingsFromFile(context.Background(), productionBuildingRepo, *buildingsFile); err != nil {
+		log.Printf("Warning: failed to load production buildings: %v", err)
 	}
 
 	// Service layer
@@ -172,6 +178,58 @@ func main() {
 	if err := http.ListenAndServe(addr, r); err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
+}
+
+type productionBuildingSeed struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+	Cost int64  `json:"cost"`
+}
+
+func loadProductionBuildingsFromFile(ctx context.Context, repo repository.ProductionBuildingRepository, path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
+	var seeds []productionBuildingSeed
+	if err := json.Unmarshal(data, &seeds); err != nil {
+		return err
+	}
+
+	created := 0
+	updated := 0
+	for _, seed := range seeds {
+		if seed.ID <= 0 || seed.Name == "" {
+			continue
+		}
+
+		existing, err := repo.GetByID(ctx, seed.ID)
+		if err != nil {
+			if err == repository.ErrProductionBuildingNotFound {
+				if _, err := repo.Create(ctx, seed.ID, seed.Name, seed.Cost); err != nil {
+					return err
+				}
+				created++
+				continue
+			}
+			return err
+		}
+
+		if _, err := repo.Update(ctx, existing.ID, seed.Name, seed.Cost); err != nil {
+			return err
+		}
+		updated++
+	}
+
+	if created > 0 {
+		log.Printf("Production buildings loaded: %d", created)
+	}
+	if updated > 0 {
+		log.Printf("Production buildings updated: %d", updated)
+	}
+
+	return nil
 }
 
 type resourceSeed struct {

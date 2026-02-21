@@ -4,11 +4,10 @@ import "time"
 
 // Resource represents a resource type in the game
 type Resource struct {
-	ID        int64
-	Name      string
-	Price     int64 // Price in thousandths for pack_size units
-	PackSize  int64 // Number of units per pack
-	CreatedAt time.Time
+	ID       int64
+	Name     string
+	Price    int64 // Price in thousandths for pack_size units
+	PackSize int64 // Number of units per pack
 }
 
 // CompanyInventory represents the quantity of a resource owned by a company

@@ -1,0 +1,6 @@
+[
+  { "id": 1, "name": "Placa solar", "cost": 50000000 },
+  { "id": 2, "name": "Pozo de agua", "cost": 100000000 },
+  { "id": 3, "name": "Semillero", "cost": 15000000 },
+  { "id": 4, "name": "Invernadero", "cost": 5000000 }
+]

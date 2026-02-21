@@ -41,8 +41,14 @@ CREATE TABLE IF NOT EXISTS resources (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
     price INTEGER NOT NULL, -- Price in thousandths for pack_size units
-    pack_size INTEGER NOT NULL DEFAULT 1, -- Number of units per pack
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    pack_size INTEGER NOT NULL DEFAULT 1 -- Number of units per pack
+);
+
+-- Production buildings table (available production buildings in the game)
+CREATE TABLE IF NOT EXISTS production_buildings (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    cost INTEGER NOT NULL
 );
 
 -- Company inventory table (resources owned by companies)

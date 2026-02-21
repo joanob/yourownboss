@@ -45,12 +45,12 @@ func NewResourceRepository(database *db.DB) ResourceRepository {
 func (r *resourceRepository) GetByID(ctx context.Context, id int64) (*db.Resource, error) {
 	row := r.db.QueryRowContext(
 		ctx,
-		`SELECT id, name, price, pack_size, created_at FROM resources WHERE id = ?`,
+		`SELECT id, name, price, pack_size FROM resources WHERE id = ?`,
 		id,
 	)
 
 	var resource db.Resource
-	if err := row.Scan(&resource.ID, &resource.Name, &resource.Price, &resource.PackSize, &resource.CreatedAt); err != nil {
+	if err := row.Scan(&resource.ID, &resource.Name, &resource.Price, &resource.PackSize); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrResourceNotFound
 		}
@@ -61,7 +61,7 @@ func (r *resourceRepository) GetByID(ctx context.Context, id int64) (*db.Resourc
 }
 
 func (r *resourceRepository) GetAll(ctx context.Context) ([]db.Resource, error) {
-	query := `SELECT id, name, price, pack_size, created_at FROM resources`
+	query := `SELECT id, name, price, pack_size FROM resources`
 
 	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
@@ -72,7 +72,7 @@ func (r *resourceRepository) GetAll(ctx context.Context) ([]db.Resource, error) 
 	var resources []db.Resource
 	for rows.Next() {
 		var resource db.Resource
-		if err := rows.Scan(&resource.ID, &resource.Name, &resource.Price, &resource.PackSize, &resource.CreatedAt); err != nil {
+		if err := rows.Scan(&resource.ID, &resource.Name, &resource.Price, &resource.PackSize); err != nil {
 			return nil, err
 		}
 		resources = append(resources, resource)
