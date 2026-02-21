@@ -79,6 +79,25 @@ export interface Company {
   updated_at: string;
 }
 
+export interface Resource {
+  id: number;
+  name: string;
+  icon: string;
+  description: string;
+  price: number; // int64 in thousandths, price per pack
+  pack_size: number; // units per pack
+}
+
+export interface InventoryItem {
+  id: number;
+  resource_id: number;
+  name: string;
+  icon: string;
+  quantity: number; // total units owned
+  price: number; // int64 in thousandths, price per pack
+  pack_size: number; // units per pack
+}
+
 // API functions
 export const authAPI = {
   register: (username: string, password: string) =>
@@ -93,6 +112,21 @@ export const authAPI = {
 export const companyAPI = {
   getMyCompany: () => api.get<Company>('/companies/me'),
   createCompany: (name: string) => api.post<Company>('/companies', { name }),
+};
+
+export const inventoryAPI = {
+  getInventory: () => api.get<InventoryItem[]>('/inventory'),
+  getResources: () => api.get<Resource[]>('/resources'),
+};
+
+export const marketAPI = {
+  buy: (resourceId: number, packCount: number) =>
+    api.post('/market/buy', { resource_id: resourceId, pack_count: packCount }),
+  sell: (resourceId: number, packCount: number) =>
+    api.post('/market/sell', {
+      resource_id: resourceId,
+      pack_count: packCount,
+    }),
 };
 
 export default api;

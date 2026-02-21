@@ -109,41 +109,10 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, toAuthResponse(result), http.StatusOK)
 }
 
-// Refresh handles token refresh
-func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
-	// Get refresh token from cookie
-	cookie, err := r.Cookie("refresh_token")
-	if err != nil {
-		respondError(w, "refresh token not found", http.StatusUnauthorized)
-		return
-	}
-
-	// Call service
-	result, err := h.authService.RefreshToken(r.Context(), cookie.Value)
-	if err != nil {
-		respondError(w, "invalid or expired refresh token", http.StatusUnauthorized)
-		return
-	}
-
-	// Set new access token cookie (refresh token stays the same)
-	http.SetCookie(w, &http.Cookie{
-		Name:     "access_token",
-		Value:    result.AccessToken,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   false, // Set to true in production with HTTPS
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   int(auth.AccessTokenDuration.Seconds()),
-	})
-
-	// Send response
-	respondJSON(w, toAuthResponse(result), http.StatusOK)
-}
-
 // Logout handles user logout
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	// Get refresh token from cookie
-	cookie, err := r.Cookie("refresh_token")
+	cookie, err := r.Cookie(auth.RefreshTokenCookieName)
 	if err == nil {
 		// Call service to revoke token
 		_ = h.authService.Logout(r.Context(), cookie.Value)
@@ -187,7 +156,7 @@ func toAuthResponse(result *service.AuthResult) AuthResponse {
 func setAuthCookies(w http.ResponseWriter, accessToken, refreshToken string) {
 	// Set access token cookie
 	http.SetCookie(w, &http.Cookie{
-		Name:     "access_token",
+		Name:     auth.AccessTokenCookieName,
 		Value:    accessToken,
 		Path:     "/",
 		HttpOnly: true,
@@ -198,7 +167,7 @@ func setAuthCookies(w http.ResponseWriter, accessToken, refreshToken string) {
 
 	// Set refresh token cookie
 	http.SetCookie(w, &http.Cookie{
-		Name:     "refresh_token",
+		Name:     auth.RefreshTokenCookieName,
 		Value:    refreshToken,
 		Path:     "/",
 		HttpOnly: true,
@@ -210,14 +179,14 @@ func setAuthCookies(w http.ResponseWriter, accessToken, refreshToken string) {
 
 func clearAuthCookies(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
-		Name:     "access_token",
+		Name:     auth.AccessTokenCookieName,
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
 		MaxAge:   -1,
 	})
 	http.SetCookie(w, &http.Cookie{
-		Name:     "refresh_token",
+		Name:     auth.RefreshTokenCookieName,
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,

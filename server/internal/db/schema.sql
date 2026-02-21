@@ -36,3 +36,30 @@ CREATE TABLE IF NOT EXISTS companies (
 
 -- Index for faster lookups
 CREATE INDEX IF NOT EXISTS idx_companies_user_id ON companies(user_id);
+-- Resources table (available resources in the game)
+CREATE TABLE IF NOT EXISTS resources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    icon TEXT NOT NULL,
+    description TEXT,
+    price INTEGER NOT NULL, -- Price in thousandths for pack_size units
+    pack_size INTEGER NOT NULL DEFAULT 1, -- Number of units per pack
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Company inventory table (resources owned by companies)
+CREATE TABLE IF NOT EXISTS company_inventory (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id INTEGER NOT NULL,
+    resource_id INTEGER NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(company_id, resource_id),
+    FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+    FOREIGN KEY (resource_id) REFERENCES resources(id) ON DELETE CASCADE
+);
+
+-- Index for faster lookups
+CREATE INDEX IF NOT EXISTS idx_company_inventory_company_id ON company_inventory(company_id);
+CREATE INDEX IF NOT EXISTS idx_company_inventory_resource_id ON company_inventory(resource_id);

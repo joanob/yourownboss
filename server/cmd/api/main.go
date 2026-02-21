@@ -40,12 +40,14 @@ func main() {
 	// Set JWT secret if provided
 	if *jwtSecret != "" {
 		auth.SetJWTSecret(*jwtSecret)
+	} else if envJwtSecret := os.Getenv("JWT_SECRET"); envJwtSecret != "" {
+		auth.SetJWTSecret(envJwtSecret)
 	} else {
 		log.Println("WARNING: Using default JWT secret. Set -jwt-secret in production!")
 	}
 
 	// Get initial company money from environment
-	initialMoney := int64(50000000) // Default: 50,000.000 in thousandths
+	initialMoney := int64(0)
 	if envMoney := os.Getenv("INITIAL_COMPANY_MONEY"); envMoney != "" {
 		if parsed, err := strconv.ParseInt(envMoney, 10, 64); err == nil {
 			initialMoney = parsed
@@ -69,14 +71,20 @@ func main() {
 	userRepo := repository.NewUserRepository(database)
 	tokenRepo := repository.NewTokenRepository(database)
 	companyRepo := repository.NewCompanyRepository(database)
+	resourceRepo := repository.NewResourceRepository(database)
+	inventoryRepo := repository.NewInventoryRepository(database)
 
 	// Service layer
 	authService := service.NewAuthService(userRepo, tokenRepo)
 	companyService := service.NewCompanyService(companyRepo, initialMoney)
+	inventoryService := service.NewInventoryService(resourceRepo, inventoryRepo)
+	marketService := service.NewMarketService(resourceRepo, companyRepo, inventoryRepo)
 
 	// Handler/Controller layer
 	authHandler := httpHandlers.NewAuthHandler(authService)
 	companyHandler := httpHandlers.NewCompanyHandler(companyService)
+	inventoryHandler := httpHandlers.NewInventoryHandler(inventoryService, companyRepo)
+	marketHandler := httpHandlers.NewMarketHandler(marketService, companyRepo)
 
 	// Setup router
 	r := chi.NewRouter()
@@ -103,17 +111,27 @@ func main() {
 		// Auth routes (public)
 		r.Post("/auth/register", authHandler.Register)
 		r.Post("/auth/login", authHandler.Login)
-		r.Post("/auth/refresh", authHandler.Refresh)
 		r.Post("/auth/logout", authHandler.Logout)
+
+		// Public inventory routes
+		r.Get("/resources", inventoryHandler.GetResources)
 
 		// Protected routes
 		r.Group(func(r chi.Router) {
-			r.Use(auth.RequireAuth)
+			r.Use(auth.RequireAuth(authService))
+
 			r.Get("/auth/me", authHandler.Me)
 
 			// Company routes
 			r.Post("/companies", companyHandler.CreateCompany)
 			r.Get("/companies/me", companyHandler.GetMyCompany)
+
+			// Inventory routes
+			r.Get("/inventory", inventoryHandler.GetInventory)
+
+			// Market routes
+			r.Post("/market/buy", marketHandler.BuyResource)
+			r.Post("/market/sell", marketHandler.SellResource)
 		})
 	})
 

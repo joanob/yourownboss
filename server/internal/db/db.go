@@ -36,5 +36,5 @@ func Open(dataSourceName string) (*DB, error) {
 		return nil, fmt.Errorf("failed to initialize schema: %w", err)
 	}
 
-	return &DB{db}, nil
+	return &DB{DB: db}, nil
 }

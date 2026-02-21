@@ -21,7 +21,7 @@ var (
 type AuthService interface {
 	Register(ctx context.Context, username, password string) (*AuthResult, error)
 	Login(ctx context.Context, username, password string) (*AuthResult, error)
-	RefreshToken(ctx context.Context, refreshToken string) (*AuthResult, error)
+	RefreshAccessToken(ctx context.Context, refreshToken string) (string, error)
 	Logout(ctx context.Context, refreshToken string) error
 	GetUserByID(ctx context.Context, userID int64) (*db.User, error)
 }
@@ -90,30 +90,26 @@ func (s *authService) Login(ctx context.Context, username, password string) (*Au
 	return s.generateTokens(ctx, user)
 }
 
-func (s *authService) RefreshToken(ctx context.Context, refreshToken string) (*AuthResult, error) {
+func (s *authService) RefreshAccessToken(ctx context.Context, refreshToken string) (string, error) {
 	// Validate refresh token
 	userID, err := s.tokenRepo.Validate(ctx, refreshToken)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	// Get user
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
-	// Generate new access token only (keep same refresh token)
+	// Generate new access token
 	accessToken, err := auth.GenerateAccessToken(user.ID, user.Username)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
-	return &AuthResult{
-		User:         user,
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken, // Return the same refresh token
-	}, nil
+	return accessToken, nil
 }
 
 func (s *authService) Logout(ctx context.Context, refreshToken string) error {
