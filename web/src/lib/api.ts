@@ -98,6 +98,30 @@ export interface InventoryItem {
   pack_size: number; // units per pack
 }
 
+// Production API types
+export interface ProductionProcessResource {
+  resource_id: number;
+  resource_name: string;
+  quantity: number;
+}
+
+export interface ProductionProcess {
+  id: number;
+  name: string;
+  processing_time_ms: number;
+  window_start_hour?: number | null;
+  window_end_hour?: number | null;
+  input_resources: ProductionProcessResource[];
+  output_resources: ProductionProcessResource[];
+}
+
+export interface ProductionBuilding {
+  id: number;
+  name: string;
+  cost: number;
+  processes: ProductionProcess[];
+}
+
 // API functions
 export const authAPI = {
   register: (username: string, password: string) =>
@@ -127,6 +151,10 @@ export const marketAPI = {
       resource_id: resourceId,
       pack_count: packCount,
     }),
+};
+
+export const productionAPI = {
+  getProductionBuildings: () => api.get<ProductionBuilding[]>('/production-buildings'),
 };
 
 export default api;

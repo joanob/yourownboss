@@ -27,7 +27,8 @@ type ProductionProcessDetails struct {
 	ProcessingTimeMs int64
 	WindowStartHour  *int64
 	WindowEndHour    *int64
-	Resources        []ProductionProcessResourceDetails
+	InputResources   []ProductionProcessResourceDetails
+	OutputResources  []ProductionProcessResourceDetails
 }
 
 // ProductionProcessResourceDetails represents an input/output resource for a process.
@@ -90,18 +91,24 @@ func (s *productionService) GetProductionBuildings(ctx context.Context) ([]Produ
 				return nil, err
 			}
 
-			resourcesDetails := make([]ProductionProcessResourceDetails, 0, len(processResources))
+			resourcesDetailsInput := make([]ProductionProcessResourceDetails, 0)
+			resourcesDetailsOutput := make([]ProductionProcessResourceDetails, 0)
 			for _, processResource := range processResources {
 				resourceName := ""
 				if res, ok := resourceByID[processResource.ResourceID]; ok {
 					resourceName = res.Name
 				}
-				resourcesDetails = append(resourcesDetails, ProductionProcessResourceDetails{
+				resourceDetail := ProductionProcessResourceDetails{
 					ResourceID:   processResource.ResourceID,
 					ResourceName: resourceName,
 					Direction:    processResource.Direction,
 					Quantity:     processResource.Quantity,
-				})
+				}
+				if processResource.Direction == "input" {
+					resourcesDetailsInput = append(resourcesDetailsInput, resourceDetail)
+				} else {
+					resourcesDetailsOutput = append(resourcesDetailsOutput, resourceDetail)
+				}
 			}
 
 			processDetails = append(processDetails, ProductionProcessDetails{
@@ -110,7 +117,8 @@ func (s *productionService) GetProductionBuildings(ctx context.Context) ([]Produ
 				ProcessingTimeMs: process.ProcessingTimeMs,
 				WindowStartHour:  process.WindowStartHour,
 				WindowEndHour:    process.WindowEndHour,
-				Resources:        resourcesDetails,
+				InputResources:   resourcesDetailsInput,
+				OutputResources:  resourcesDetailsOutput,
 			})
 		}
 

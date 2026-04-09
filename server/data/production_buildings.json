@@ -9,8 +9,9 @@
         "name": "Generar electricidad",
         "processing_time_ms": 500,
         "time_window": { "start_hour": 8, "end_hour": 20 },
-        "resources": [
-          { "resource_id": 1, "direction": "output", "quantity": 1 }
+        "input_resources": [],
+        "output_resources": [
+          { "resource_id": 1, "quantity": 1 }
         ]
       }
     ]
@@ -24,8 +25,11 @@
         "id": 201,
         "name": "Extraer agua",
         "processing_time_ms": 800,
-        "resources": [
-          { "resource_id": 2, "direction": "output", "quantity": 3 }
+        "input_resources": [
+            { "resource_id": 1, "quantity": 5 }
+        ],
+        "output_resources": [
+          { "resource_id": 2, "quantity": 1 }
         ]
       }
     ]
@@ -39,9 +43,12 @@
         "id": 301,
         "name": "Germinar semillas",
         "processing_time_ms": 90000,
-        "resources": [
-          { "resource_id": 3, "direction": "input", "quantity": 1 },
-          { "resource_id": 3, "direction": "output", "quantity": 2 }
+        "input_resources": [
+          { "resource_id": 2, "quantity": 50 },
+          { "resource_id": 4, "quantity": 1 }
+        ],
+        "output_resources": [
+          { "resource_id": 3, "quantity": 10 }
         ]
       }
     ]
@@ -53,12 +60,14 @@
     "processes": [
       {
         "id": 401,
-        "name": "Cultivar plantas",
+        "name": "Cultivar tomates",
         "processing_time_ms": 900000,
-        "resources": [
-          { "resource_id": 2, "direction": "input", "quantity": 1 },
-          { "resource_id": 3, "direction": "input", "quantity": 1 },
-          { "resource_id": 4, "direction": "output", "quantity": 2 }
+        "input_resources": [
+          { "resource_id": 2, "quantity": 200 },
+          { "resource_id": 3, "quantity": 8 }
+        ],
+        "output_resources": [
+          { "resource_id": 4, "quantity": 15 }
         ]
       }
     ]

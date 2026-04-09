@@ -209,7 +209,8 @@ type productionProcessSeed struct {
 	Name             string                    `json:"name"`
 	ProcessingTimeMs int64                     `json:"processing_time_ms"`
 	TimeWindow       *productionTimeWindowSeed `json:"time_window"`
-	Resources        []processResourceSeed     `json:"resources"`
+	InputResources   []processResourceSeed     `json:"input_resources"`
+	OutputResources  []processResourceSeed     `json:"output_resources"`
 }
 
 type processResourceSeed struct {
@@ -335,13 +336,14 @@ func loadProductionBuildingsFromFile(
 				existingByKey[key] = existingResource
 			}
 
-			seen := make(map[string]struct{}, len(processSeed.Resources))
-			for _, resourceSeed := range processSeed.Resources {
+			seen := make(map[string]struct{}, len(processSeed.InputResources)+len(processSeed.OutputResources))
+			for _, resourceSeed := range append(processSeed.InputResources, processSeed.OutputResources...) {
 				if resourceSeed.ResourceID <= 0 || resourceSeed.Quantity <= 0 {
 					continue
 				}
-				if resourceSeed.Direction != "input" && resourceSeed.Direction != "output" {
-					continue
+				direction := "input"
+				if contains(processSeed.OutputResources, resourceSeed) {
+					direction = "output"
 				}
 
 				if _, err := resourceRepo.GetByID(ctx, resourceSeed.ResourceID); err != nil {
@@ -351,7 +353,7 @@ func loadProductionBuildingsFromFile(
 					return err
 				}
 
-				key := fmt.Sprintf("%d|%s", resourceSeed.ResourceID, resourceSeed.Direction)
+				key := fmt.Sprintf("%d|%s", resourceSeed.ResourceID, direction)
 				if existing, ok := existingByKey[key]; ok {
 					if existing.Quantity != resourceSeed.Quantity {
 						processResourcesUpdated++
@@ -364,7 +366,7 @@ func loadProductionBuildingsFromFile(
 					ctx,
 					processSeed.ID,
 					resourceSeed.ResourceID,
-					resourceSeed.Direction,
+					direction,
 					resourceSeed.Quantity,
 				); err != nil {
 					return err
@@ -414,6 +416,15 @@ func loadProductionBuildingsFromFile(
 	}
 
 	return nil
+}
+
+func contains(resources []processResourceSeed, resource processResourceSeed) bool {
+	for _, r := range resources {
+		if r.ResourceID == resource.ResourceID && r.Quantity == resource.Quantity {
+			return true
+		}
+	}
+	return false
 }
 
 type resourceSeed struct {

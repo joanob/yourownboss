@@ -30,7 +30,8 @@ type ProductionProcessResponse struct {
 	ProcessingTimeMs int64                               `json:"processing_time_ms"`
 	WindowStartHour  *int64                              `json:"window_start_hour"`
 	WindowEndHour    *int64                              `json:"window_end_hour"`
-	Resources        []ProductionProcessResourceResponse `json:"resources"`
+	InputResources   []ProductionProcessResourceResponse `json:"input_resources"`
+	OutputResources  []ProductionProcessResourceResponse `json:"output_resources"`
 }
 
 type ProductionProcessResourceResponse struct {
@@ -54,9 +55,18 @@ func (h *ProductionHandler) GetProductionBuildings(w http.ResponseWriter, r *htt
 	for _, building := range buildings {
 		processes := make([]ProductionProcessResponse, 0, len(building.Processes))
 		for _, process := range building.Processes {
-			resources := make([]ProductionProcessResourceResponse, 0, len(process.Resources))
-			for _, resource := range process.Resources {
-				resources = append(resources, ProductionProcessResourceResponse{
+			resourcesInput := make([]ProductionProcessResourceResponse, 0)
+			resourcesOutput := make([]ProductionProcessResourceResponse, 0)
+			for _, resource := range process.InputResources {
+				resourcesInput = append(resourcesInput, ProductionProcessResourceResponse{
+					ResourceID:   resource.ResourceID,
+					ResourceName: resource.ResourceName,
+					Direction:    resource.Direction,
+					Quantity:     resource.Quantity,
+				})
+			}
+			for _, resource := range process.OutputResources {
+				resourcesOutput = append(resourcesOutput, ProductionProcessResourceResponse{
 					ResourceID:   resource.ResourceID,
 					ResourceName: resource.ResourceName,
 					Direction:    resource.Direction,
@@ -70,7 +80,8 @@ func (h *ProductionHandler) GetProductionBuildings(w http.ResponseWriter, r *htt
 				ProcessingTimeMs: process.ProcessingTimeMs,
 				WindowStartHour:  process.WindowStartHour,
 				WindowEndHour:    process.WindowEndHour,
-				Resources:        resources,
+				InputResources:   resourcesInput,
+				OutputResources:  resourcesOutput,
 			})
 		}
 
