@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
-	"os"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -16,8 +15,7 @@ func RegisterRoutes(r chi.Router, db *sql.DB) {
 	svc := NewService(repo)
 
 	r.Post("/api/resources/upsert", func(w http.ResponseWriter, req *http.Request) {
-		// simple auth: Bearer <AUTH_TOKEN>
-		r.Post("/api/resources/upsert", func(w http.ResponseWriter, req *http.Request) {
+		var body struct {
 			Resources []ResourceDTO `json:"resources"`
 		}
 		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
