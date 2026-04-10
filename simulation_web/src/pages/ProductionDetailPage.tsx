@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react'
+import React, {useEffect, useState, useRef} from 'react'
 import { useRoute, Link, useLocation } from 'wouter'
 import api from '../lib/api'
 
@@ -15,9 +15,13 @@ const ProductionDetailPage: React.FC = () => {
   const [building, setBuilding] = useState<Building>(emptyBuilding())
   const [loading, setLoading] = useState(false)
   const [resources, setResources] = useState<Array<{id:number; name:string}>>([])
+  const resourcesFetched = useRef(false)
+  const buildingFetchedId = useRef<number | null>(null)
 
   // load resources for select dropdown
   useEffect(() => {
+    if (resourcesFetched.current) return
+    resourcesFetched.current = true
     let mounted = true
     api.get('/resources')
       .then((res) => { if (!mounted) return; setResources(res.data || []) })
@@ -33,6 +37,9 @@ const ProductionDetailPage: React.FC = () => {
     }
     const id = parseInt(idParam, 10)
     if (!id) return
+    // avoid refetching same building id (and duplicate StrictMode calls)
+    if (buildingFetchedId.current === id) return
+    buildingFetchedId.current = id
     setLoading(true)
     let mounted = true
     api.get(`/buildings/${id}`).then((res) => {

@@ -1,4 +1,4 @@
-import React, {createContext, useContext, useEffect, useState} from 'react'
+import React, {createContext, useContext, useState} from 'react'
 import api from '../lib/api'
 
 type AuthContextType = {
@@ -12,16 +12,16 @@ export const AuthProvider: React.FC<React.PropsWithChildren<{}>> = ({children}) 
   // token is kept in memory only; do not persist across page reloads
   const [token, setTokenState] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (token) {
-      // Set Authorization only on our api axios instance
-      try { api.defaults.headers.common['Authorization'] = `Bearer ${token}` } catch {}
+  // setToken updates the axios header first, then updates React state to
+  // avoid a race where components fetch before the header is applied.
+  const setToken = (t: string | null) => {
+    if (t) {
+      try { api.defaults.headers.common['Authorization'] = `Bearer ${t}` } catch {}
     } else {
       try { delete api.defaults.headers.common['Authorization'] } catch {}
     }
-  }, [token])
-
-  const setToken = (t: string | null) => setTokenState(t)
+    setTokenState(t)
+  }
 
   return (
     <AuthContext.Provider value={{token, setToken}}>

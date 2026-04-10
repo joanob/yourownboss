@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react'
+import React, {useEffect, useState, useRef} from 'react'
 import { Link } from 'wouter'
 import api from '../lib/api'
 
@@ -6,8 +6,11 @@ type Building = { id: number; name: string }
 
 const ProductionListPage: React.FC = () => {
   const [buildings, setBuildings] = useState<Building[]>([])
+  const fetchRef = useRef(false)
 
   useEffect(() => {
+    if (fetchRef.current) return
+    fetchRef.current = true
     let mounted = true
     api.get('/buildings')
       .then((res) => { if (!mounted) return; setBuildings(res.data || []) })

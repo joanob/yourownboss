@@ -1,23 +1,26 @@
-import React, {useEffect, useState} from 'react'
+import React, {useEffect, useState, useRef} from 'react'
 import api from '../lib/api'
 
 type Resource = { id: number; name: string }
 
 const ResourcesPage: React.FC = () => {
   const [resources, setResources] = useState<Resource[]>([])
+  const fetchRef = useRef(false)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    let mounted = true
+    // fetch once on mount and avoid duplicate fetches in StrictMode (dev)
+    if (fetchRef.current) return
+    fetchRef.current = true
     api.get('/resources')
       .then((res) => {
-        if (!mounted) return
-        if (Array.isArray(res.data)) setResources(res.data)
+        if (Array.isArray(res.data)) {
+            setResources(res.data)
+        }
       })
-      .catch(() => {
-        // ignore — allow empty start
+      .catch((err) => {
+        console.error('GET /resources error:', err)
       })
-    return () => { mounted = false }
   }, [])
 
   const setId = (index: number, value: number) => {
@@ -53,6 +56,8 @@ const ResourcesPage: React.FC = () => {
     }
   }
 
+  console.log(resources)
+
   return (
     <div>
       <h2>Resources</h2>
@@ -68,7 +73,7 @@ const ResourcesPage: React.FC = () => {
         </thead>
         <tbody>
           {resources.map((r, i) => (
-            <tr key={i} style={{borderTop: '1px solid #eee'}}>
+            <tr key={r.id ?? i} style={{borderTop: '1px solid #eee'}}>
               <td style={{padding: 6}}>
                 <input type="number" value={r.id} onChange={(e) => setId(i, parseInt(e.target.value || '0', 10))} />
               </td>
