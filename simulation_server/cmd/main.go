@@ -14,7 +14,9 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
 
+	"yourownboss/simulation/internal/auth"
 	"yourownboss/simulation/internal/migrations"
+	"yourownboss/simulation/internal/resources"
 
 	_ "modernc.org/sqlite"
 )
@@ -63,11 +65,17 @@ func main() {
 		MaxAge:           300,
 	}))
 
+	// Auth middleware (all routes require Authorization: Bearer <AUTH_TOKEN>)
+	r.Use(auth.AuthMiddleware)
+
 	// Simple health endpoint
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+
+	// Register resources routes
+	resources.RegisterRoutes(r, db)
 
 	// Server config
 	port := os.Getenv("PORT")
