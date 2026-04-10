@@ -1,46 +1,47 @@
 import React, {useState} from 'react'
 import {useAuth} from '../contexts/AuthContext'
 
-const modalStyle: React.CSSProperties = {
-  position: 'fixed',
-  inset: 0,
+const pageStyle: React.CSSProperties = {
+  minHeight: '100vh',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  background: 'rgba(0,0,0,0.4)'
+  padding: 20,
+  background: '#f7f7f8'
 }
 
 const boxStyle: React.CSSProperties = {
   background: 'white',
-  padding: 20,
+  padding: 28,
   borderRadius: 8,
-  minWidth: 320
+  width: 420,
+  boxShadow: '0 6px 18px rgba(0,0,0,0.06)'
 }
 
 export const AuthModal: React.FC = () => {
   const {token, setToken} = useAuth()
   const [value, setValue] = useState('')
 
-  if (token) return null
+  // This component is now a full-page auth screen. It should be rendered
+  // exclusively when there is no token (App.tsx enforces that).
 
   return (
-    <div style={modalStyle} role="dialog" aria-modal>
+    <div style={pageStyle} role="main">
       <div style={boxStyle}>
-        <h3>Introduce la contraseña</h3>
+        <h2 style={{marginTop: 0}}>Autenticación</h2>
+        <p>Introduce la contraseña para acceder a la aplicación.</p>
         <input
           autoFocus
           type="password"
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          style={{width: '100%', padding: 8, marginBottom: 10}}
+          style={{width: '100%', padding: 10, marginBottom: 12, boxSizing: 'border-box'}}
         />
         <div style={{display: 'flex', justifyContent: 'flex-end', gap: 8}}>
-          <button onClick={() => setToken(null)}>Salir</button>
-          <button onClick={() => setToken(value)}>Aceptar</button>
+          <button onClick={() => setValue('')}>Limpiar</button>
+          <button onClick={() => setToken(value)} style={{padding: '6px 12px'}}>Entrar</button>
         </div>
-        <p style={{fontSize: 12, marginTop: 10}}>
-          La contraseña se guarda solo durante la sesión del navegador.
-        </p>
+        <p style={{fontSize: 12, marginTop: 12, color: '#666'}}>La contraseña se mantiene solo en memoria y habrá que introducirla al recargar la página.</p>
       </div>
     </div>
   )

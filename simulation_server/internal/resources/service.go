@@ -67,3 +67,8 @@ func (s *Service) UpsertResources(ctx context.Context, db *sql.DB, items []Resou
 	}
 	return nil
 }
+
+// ListResources returns all resources
+func (s *Service) ListResources(ctx context.Context) ([]ResourceDTO, error) {
+	return s.repo.List(ctx)
+}

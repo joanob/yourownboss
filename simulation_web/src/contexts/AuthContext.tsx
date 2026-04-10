@@ -1,5 +1,5 @@
 import React, {createContext, useContext, useEffect, useState} from 'react'
-import axios from 'axios'
+import api from '../lib/api'
 
 type AuthContextType = {
   token: string | null
@@ -9,21 +9,15 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export const AuthProvider: React.FC<React.PropsWithChildren<{}>> = ({children}) => {
-  const [token, setTokenState] = useState<string | null>(() => {
-    try {
-      return sessionStorage.getItem('yb_token')
-    } catch {
-      return null
-    }
-  })
+  // token is kept in memory only; do not persist across page reloads
+  const [token, setTokenState] = useState<string | null>(null)
 
   useEffect(() => {
     if (token) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
-      try { sessionStorage.setItem('yb_token', token) } catch {}
+      // Set Authorization only on our api axios instance
+      try { api.defaults.headers.common['Authorization'] = `Bearer ${token}` } catch {}
     } else {
-      delete axios.defaults.headers.common['Authorization']
-      try { sessionStorage.removeItem('yb_token') } catch {}
+      try { delete api.defaults.headers.common['Authorization'] } catch {}
     }
   }, [token])
 

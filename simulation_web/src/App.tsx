@@ -1,11 +1,35 @@
 import './App.css'
 import AuthModal from './components/AuthModal'
+import { Link, Route } from 'wouter'
+import ResourcesPage from './pages/ResourcesPage'
+import ProductionPage from './pages/ProductionPage'
+import { useAuth } from './contexts/AuthContext'
 
 function App() {
+  const { token } = useAuth()
+
+  // If no token, render only the auth page — prevent access to any route.
+  if (!token) return <AuthModal />
 
   return (
     <>
-      <AuthModal />
+      <header style={{padding: 12, borderBottom: '1px solid #eee', display: 'flex', gap: 12}}>
+        <nav style={{display: 'flex', gap: 12}}>
+          <Link href="/resources">Resources</Link>
+          <Link href="/production">Production</Link>
+        </nav>
+      </header>
+      <main style={{padding: 16}}>
+        <Route path="/resources">
+          <ResourcesPage />
+        </Route>
+        <Route path="/production">
+          <ProductionPage />
+        </Route>
+        <Route path="/">
+          <ResourcesPage />
+        </Route>
+      </main>
     </>
   )
 }

@@ -39,3 +39,25 @@ func (r *Repository) Update(ctx context.Context, tx *sql.Tx, id int64, name stri
 	_, err := tx.ExecContext(ctx, "UPDATE resources SET name = ? WHERE id = ?", name, id)
 	return err
 }
+
+// List returns all resources ordered by id
+func (r *Repository) List(ctx context.Context) ([]ResourceDTO, error) {
+	rows, err := r.db.QueryContext(ctx, "SELECT id, name FROM resources ORDER BY id")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []ResourceDTO
+	for rows.Next() {
+		var it ResourceDTO
+		if err := rows.Scan(&it.ID, &it.Name); err != nil {
+			return nil, err
+		}
+		result = append(result, it)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}

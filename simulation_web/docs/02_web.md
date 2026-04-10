@@ -10,7 +10,7 @@ Al lado de cada proceso habrá un botón para navegar a una pantalla de simulaci
 
 ## Stack
 
-El stack quiero que sea React con Vite y Typescript. Imagino que necesitaremos axios y wouter/react-router. Dime los comandos que tengo que ejecutar para tenerlo todo listo. 
+El stack quiero que sea React con Vite y Typescript. Imagino que necesitaremos axios y wouter. Dime los comandos que tengo que ejecutar para tenerlo todo listo. 
 No necesito que la web tenga estado, el unico estado será la contraseña que se pide al principio de la sesión y se envia en Authorization: Bearer 
 
 En este mismo archivo, añade una planificación para poder ir punto por punto diciendote que vayas generando la aplicación. Preguntame lo que necesites y dime los comandos que necesitas que ejecute. Ten en cuenta que solamente necesito una app funcional, no necesito que sea profesional, es para uso propio y privado
