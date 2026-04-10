@@ -81,10 +81,9 @@ func (r *Repository) InsertProcessResource(ctx context.Context, tx *sql.Tx, proc
 
 // Detailed read types
 type ResourceDetail struct {
-	ResourceID  int64    `json:"resource_id"`
-	IsOutput    bool     `json:"is_output"`
-	Name        string   `json:"name"`
-	MarketPrice *float64 `json:"market_price,omitempty"`
+	ResourceID int64  `json:"resource_id"`
+	IsOutput   bool   `json:"is_output"`
+	Name       string `json:"name"`
 }
 
 type ProcessDetail struct {
@@ -106,7 +105,7 @@ func (r *Repository) GetAllBuildingsDetailed(ctx context.Context) ([]BuildingDet
 	q := `SELECT b.id AS b_id, b.name AS b_name,
 				   p.id AS p_id, p.name AS p_name, p.start_hour AS p_start, p.end_hour AS p_end,
 				   pr.resource_id AS res_id, pr.is_output AS res_is_output,
-				   rr.name AS res_name, rr.market_price AS res_price
+				   rr.name AS res_name
 			FROM production_buildings b
 			LEFT JOIN production_processes p ON p.building_id = b.id
 			LEFT JOIN process_resources pr ON pr.process_id = p.id
@@ -133,9 +132,8 @@ func (r *Repository) GetAllBuildingsDetailed(ctx context.Context) ([]BuildingDet
 		var resID sql.NullInt64
 		var resIsOutput sql.NullInt64
 		var resName sql.NullString
-		var resPrice sql.NullFloat64
 
-		if err := rows.Scan(&bID, &bName, &pID, &pName, &pStart, &pEnd, &resID, &resIsOutput, &resName, &resPrice); err != nil {
+		if err := rows.Scan(&bID, &bName, &pID, &pName, &pStart, &pEnd, &resID, &resIsOutput, &resName); err != nil {
 			return nil, fmt.Errorf("scan row: %w", err)
 		}
 
@@ -177,12 +175,8 @@ func (r *Repository) GetAllBuildingsDetailed(ctx context.Context) ([]BuildingDet
 			}
 
 			if resID.Valid {
-				var mp *float64
-				if resPrice.Valid {
-					v := resPrice.Float64
-					mp = &v
-				}
-				rd := ResourceDetail{ResourceID: resID.Int64, IsOutput: resIsOutput.Int64 == 1, Name: resName.String, MarketPrice: mp}
+				rd := ResourceDetail{ResourceID: resID.Int64, IsOutput: resIsOutput.Int64 == 1, Name: resName.String}
+
 				curP.Resources = append(curP.Resources, rd)
 			}
 		}
@@ -200,7 +194,7 @@ func (r *Repository) GetBuildingDetailed(ctx context.Context, bid int64) (*Build
 	q := `SELECT b.id AS b_id, b.name AS b_name,
 				   p.id AS p_id, p.name AS p_name, p.start_hour AS p_start, p.end_hour AS p_end,
 				   pr.resource_id AS res_id, pr.is_output AS res_is_output,
-				   rr.name AS res_name, rr.market_price AS res_price
+				   rr.name AS res_name
 			FROM production_buildings b
 			LEFT JOIN production_processes p ON p.building_id = b.id
 			LEFT JOIN process_resources pr ON pr.process_id = p.id
@@ -227,9 +221,8 @@ func (r *Repository) GetBuildingDetailed(ctx context.Context, bid int64) (*Build
 		var resID sql.NullInt64
 		var resIsOutput sql.NullInt64
 		var resName sql.NullString
-		var resPrice sql.NullFloat64
 
-		if err := rows.Scan(&bID, &bName, &pID, &pName, &pStart, &pEnd, &resID, &resIsOutput, &resName, &resPrice); err != nil {
+		if err := rows.Scan(&bID, &bName, &pID, &pName, &pStart, &pEnd, &resID, &resIsOutput, &resName); err != nil {
 			return nil, fmt.Errorf("scan row: %w", err)
 		}
 
@@ -266,12 +259,7 @@ func (r *Repository) GetBuildingDetailed(ctx context.Context, bid int64) (*Build
 			}
 
 			if resID.Valid {
-				var mp *float64
-				if resPrice.Valid {
-					v := resPrice.Float64
-					mp = &v
-				}
-				rd := ResourceDetail{ResourceID: resID.Int64, IsOutput: resIsOutput.Int64 == 1, Name: resName.String, MarketPrice: mp}
+				rd := ResourceDetail{ResourceID: resID.Int64, IsOutput: resIsOutput.Int64 == 1, Name: resName.String}
 				curP.Resources = append(curP.Resources, rd)
 			}
 		}

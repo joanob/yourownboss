@@ -3,6 +3,7 @@ import AuthModal from './components/AuthModal'
 import { Link, Route } from 'wouter'
 import ResourcesPage from './pages/ResourcesPage'
 import ProductionPage from './pages/ProductionPage'
+import ProductionDetailPage from './pages/ProductionDetailPage'
 import { useAuth } from './contexts/AuthContext'
 
 function App() {
@@ -25,6 +26,9 @@ function App() {
         </Route>
         <Route path="/production">
           <ProductionPage />
+        </Route>
+        <Route path="/production/:id">
+          {(params: any) => <ProductionDetailPage />}
         </Route>
         <Route path="/">
           <ResourcesPage />

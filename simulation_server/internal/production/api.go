@@ -18,6 +18,7 @@ func RegisterRoutes(r chi.Router, db *sql.DB) {
 	r.Get("/api/buildings", func(w http.ResponseWriter, req *http.Request) {
 		buildings, err := repo.GetAllBuildingsDetailed(req.Context())
 		if err != nil {
+			fmt.Println(err.Error())
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

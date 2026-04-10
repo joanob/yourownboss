@@ -1,12 +1,8 @@
 import React from 'react'
+import ProductionListPage from './ProductionListPage'
 
 const ProductionPage: React.FC = () => {
-  return (
-    <div>
-      <h2>Production (placeholder)</h2>
-      <p>Listado de edificios y edición — pendiente (próximo paso).</p>
-    </div>
-  )
+  return <ProductionListPage />
 }
 
 export default ProductionPage
