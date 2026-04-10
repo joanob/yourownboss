@@ -16,6 +16,10 @@ const SimulationPage: React.FC = () => {
   const [timeStep, setTimeStep] = useState(1000)
   const [running, setRunning] = useState(false)
   const [history, setHistory] = useState<SimulationResult[]>([])
+  const [benefitFilter, setBenefitFilter] = useState<{min:number; max:number}|null>(null)
+  const [resourcePriceFilters, setResourcePriceFilters] = useState<Record<number, {min:number; max:number}>>({})
+  const [sortDesc, setSortDesc] = useState(true)
+  const [expandedSims, setExpandedSims] = useState<number[]>([])
 
   useEffect(() => {
     if (!pid) return
@@ -28,8 +32,58 @@ const SimulationPage: React.FC = () => {
 
     api.get(`/simulations?process_id=${pid}`).then((res) => { if (!mounted) setHistory(res.data || []) }).catch(()=>{})
 
+
     return () => { mounted = false }
   }, [pid])
+
+  // derive default filters from history when it changes
+  useEffect(() => {
+    if (!history || history.length === 0) {
+      setBenefitFilter(null)
+      setResourcePriceFilters({})
+      return
+    }
+    let minB = Number.POSITIVE_INFINITY
+    let maxB = Number.NEGATIVE_INFINITY
+    const rp: Record<number, {min:number; max:number}> = {}
+    for (const h of history) {
+      const b = Number(h.benefit_per_hour) || 0
+      if (b < minB) minB = b
+      if (b > maxB) maxB = b
+      for (const r of (h.resources || [])) {
+        const id = Number(r.resource_id)
+        const price = Number(r.price)
+        if (!rp[id]) rp[id] = {min: price, max: price}
+        else {
+          if (price < rp[id].min) rp[id].min = price
+          if (price > rp[id].max) rp[id].max = price
+        }
+      }
+    }
+    if (minB === Number.POSITIVE_INFINITY) { minB = 0; maxB = 0 }
+    setBenefitFilter({min: Math.floor(minB), max: Math.ceil(maxB)})
+    setResourcePriceFilters(rp)
+  }, [history])
+
+  const applyFilters = (items: SimulationResult[]) => {
+    if (!items) return []
+    return items.filter((h) => {
+      const b = Number(h.benefit_per_hour) || 0
+      if (benefitFilter) {
+        if (b < benefitFilter.min || b > benefitFilter.max) return false
+      }
+      for (const [ridStr, fr] of Object.entries(resourcePriceFilters)) {
+        const rid = Number(ridStr)
+        const found = (h.resources || []).find((rr: any) => Number(rr.resource_id) === rid)
+        if (!found) return false
+        const price = Number(found.price)
+        if (price < fr.min || price > fr.max) return false
+      }
+      return true
+    })
+  }
+
+  const filtered = applyFilters(history).sort((a,b) => sortDesc ? (Number(b.benefit_per_hour) - Number(a.benefit_per_hour)) : (Number(a.benefit_per_hour) - Number(b.benefit_per_hour)))
 
   const setRangeField = (index:number, field: keyof ResourceRange, value:any) => {
     setRanges(rs => rs.map((r,i)=> i===index ? {...r, [field]: value} : r))
@@ -85,15 +139,83 @@ const SimulationPage: React.FC = () => {
 
       <h3 style={{marginTop:20}}>Simulaciones pasadas</h3>
       <div>
-        {history.length === 0 ? <p>No hay resultados todavía.</p> : (
-          <table style={{width:'100%'}}>
-            <thead><tr><th>ID</th><th>time_ms</th><th>benefit_per_hour</th></tr></thead>
-            <tbody>
-              {history.map((h: any) => (
-                <tr key={h.id}><td>{h.id}</td><td>{h.time_ms}</td><td>{h.benefit_per_hour}</td></tr>
-              ))}
-            </tbody>
-          </table>
+        {(!history || history.length === 0) ? <p>No hay resultados todavía.</p> : (
+          <div>
+            <div style={{display:'flex', gap:12, alignItems:'center', marginBottom:12}}>
+              <div>
+                <strong>Beneficio</strong>
+                {benefitFilter ? (
+                  <div style={{display:'flex', gap:6, alignItems:'center'}}>
+                    <label>Min: <input type="number" value={benefitFilter.min} onChange={(e)=> setBenefitFilter({min: Number(e.target.value), max: benefitFilter.max})} /></label>
+                    <label>Max: <input type="number" value={benefitFilter.max} onChange={(e)=> setBenefitFilter({min: benefitFilter.min, max: Number(e.target.value)})} /></label>
+                  </div>
+                ) : null}
+              </div>
+              <div>
+                <strong>Orden</strong>
+                <div>
+                  <label><input type="checkbox" checked={sortDesc} onChange={(e)=>setSortDesc(e.target.checked)} /> Ordenar por beneficio descendente</label>
+                </div>
+              </div>
+            </div>
+
+            <div style={{marginBottom:12}}>
+              <strong>Filtros por recurso</strong>
+              <div style={{display:'flex', gap:12, flexWrap:'wrap', marginTop:6}}>
+                {resources.map((resrc) => {
+                  const rid = resrc.resource_id
+                  const fr = resourcePriceFilters[rid] || {min: 0, max: 0}
+                  return (
+                    <div key={rid} style={{border:'1px solid #eee', padding:8}}>
+                      <div>{resrc.name} ({rid})</div>
+                      <div style={{display:'flex', gap:6}}>
+                        <label>Min: <input type="number" value={fr.min} onChange={(e)=> setResourcePriceFilters(prev => ({...prev, [rid]: {min: Number(e.target.value), max: prev[rid]?.max ?? fr.max}}))} /></label>
+                        <label>Max: <input type="number" value={fr.max} onChange={(e)=> setResourcePriceFilters(prev => ({...prev, [rid]: {min: prev[rid]?.min ?? fr.min, max: Number(e.target.value)}}))} /></label>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            <table style={{width:'100%'}}>
+              <thead><tr><th></th><th>ID</th><th>time_ms</th><th>benefit_per_hour</th></tr></thead>
+              <tbody>
+                {filtered.map((h: any) => (
+                  <React.Fragment key={h.id}>
+                    <tr>
+                      <td style={{width:40}}>
+                        <button onClick={() => {
+                          setExpandedSims(prev => prev.includes(h.id) ? prev.filter(x=>x!==h.id) : [...prev, h.id])
+                        }}>{expandedSims.includes(h.id) ? '▾' : '▸'}</button>
+                      </td>
+                      <td>{h.id}</td>
+                      <td>{h.time_ms}</td>
+                      <td>{h.benefit_per_hour}</td>
+                    </tr>
+                    {expandedSims.includes(h.id) ? (
+                      <tr>
+                        <td colSpan={4}>
+                          <div style={{padding:8, background:'#fafafa', border:'1px solid #eee'}}>
+                            <strong>Recursos</strong>
+                            <table style={{width:'100%', marginTop:6}}>
+                              <thead><tr><th>Recurso</th><th>is_output</th><th>price</th><th>quantity</th></tr></thead>
+                              <tbody>
+                                {(h.resources || []).map((rr: any) => {
+                                  const name = resources.find(r=>r.resource_id === Number(rr.resource_id))?.name || rr.resource_id
+                                  return <tr key={String(rr.resource_id)+String(rr.is_output)}><td>{name}</td><td>{rr.is_output ? 'Sí' : 'No'}</td><td>{rr.price}</td><td>{rr.quantity}</td></tr>
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

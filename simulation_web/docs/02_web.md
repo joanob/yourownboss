@@ -37,3 +37,7 @@ En este mismo archivo, añade una planificación para poder ir punto por punto d
 	- Formulario para `time_min_ms`, `time_max_ms`, `time_step_ms` y rangos de precio por recurso.
 	- Botón `Iniciar simulación` que POST a `/api/simulations` y devuelve 202.
 	- Página para listar simulaciones pasadas (leer de `simulations` y `simulation_resources`).
+
+6. Ver resultados de simulación
+	- Listar resultados. Ordenar por beneficio
+	- Filtros para beneficio y filtros para el precio de cada uno de los recursos afectados. Estos filtros tendrán un valor de inicio y fin. Por defecto, el valor de inicio será el valor menor que exista y lo mismo con el valor mayor
