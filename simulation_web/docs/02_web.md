@@ -1,6 +1,6 @@
 # Web
 
-En la carpeta web estará el frontend del simulador (el backend está en simulation_server).
+En la carpeta simulation_web estará el frontend del simulador (el backend está en simulation_server).
 
 Mi idea es que haya una pestaña resources y otra pestaña production. En resources estará la lista de recursos (id y nombre) y se puedan crear nuevos y modificar existentes. Con el botón de guardar se envian todos los recursos a la vez para hacer un bulk upsert.
 
@@ -17,7 +17,7 @@ En este mismo archivo, añade una planificación para poder ir punto por punto d
 
 ## Plan y comandos recomendados
 
-1. Crear proyecto en la carpeta web e instalar dependencias necesarias
+1. Crear proyecto en la carpeta simulation_web e instalar dependencias necesarias
 
 2. Autenticación ligera: modal para pedir password al abrir la app y guardar en memoria durante la sesión. Utilizar password en todas las requests `Authorization: Bearer <password>`
 
