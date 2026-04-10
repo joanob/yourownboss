@@ -1,6 +1,7 @@
 import React, {useEffect, useState, useRef} from 'react'
 import { useRoute, Link, useLocation } from 'wouter'
 import api from '../lib/api'
+import { getResources } from '../lib/resourceCache'
 
 type ProcessResource = { id?: number | null; resource_id: number; is_output: boolean }
 type Process = { id?: number | null; name: string; start_hour?: number | null; end_hour?: number | null; resources: ProcessResource[] }
@@ -22,11 +23,9 @@ const ProductionDetailPage: React.FC = () => {
   useEffect(() => {
     if (resourcesFetched.current) return
     resourcesFetched.current = true
-    let mounted = true
-    api.get('/resources')
-      .then((res) => { if (!mounted) return; setResources(res.data || []) })
+    getResources()
+      .then((data) => { setResources(data || []) })
       .catch(() => {})
-    return () => { mounted = false }
   }, [])
 
   useEffect(() => {
@@ -41,12 +40,9 @@ const ProductionDetailPage: React.FC = () => {
     if (buildingFetchedId.current === id) return
     buildingFetchedId.current = id
     setLoading(true)
-    let mounted = true
     api.get(`/buildings/${id}`).then((res) => {
-      if (!mounted) return
       setBuilding(res.data)
-    }).catch(() => {}).finally(() => { if (mounted) setLoading(false) })
-    return () => { mounted = false }
+    }).catch(() => {}).finally(() => { setLoading(false) })
   }, [match, idParam])
 
   const setField = (field: keyof Building, value: any) => setBuilding(b => ({...b, [field]: value}))

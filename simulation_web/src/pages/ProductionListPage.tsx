@@ -11,11 +11,9 @@ const ProductionListPage: React.FC = () => {
   useEffect(() => {
     if (fetchRef.current) return
     fetchRef.current = true
-    let mounted = true
     api.get('/buildings')
-      .then((res) => { if (!mounted) return; setBuildings(res.data || []) })
+      .then((res) => { setBuildings(res.data || []) })
       .catch(() => {})
-    return () => { mounted = false }
   }, [])
 
   return (

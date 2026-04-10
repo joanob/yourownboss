@@ -1,5 +1,6 @@
 import React, {useEffect, useState, useRef} from 'react'
 import api from '../lib/api'
+import { getResources, invalidateResources } from '../lib/resourceCache'
 
 type Resource = { id: number; name: string }
 
@@ -12,11 +13,9 @@ const ResourcesPage: React.FC = () => {
     // fetch once on mount and avoid duplicate fetches in StrictMode (dev)
     if (fetchRef.current) return
     fetchRef.current = true
-    api.get('/resources')
-      .then((res) => {
-        if (Array.isArray(res.data)) {
-            setResources(res.data)
-        }
+    getResources()
+      .then((data) => {
+        setResources(data || [])
       })
       .catch((err) => {
         console.error('GET /resources error:', err)
@@ -47,6 +46,14 @@ const ResourcesPage: React.FC = () => {
     setSaving(true)
     try {
       await api.post('/resources/upsert', {resources})
+      // refresh cache and local state
+      invalidateResources()
+      try {
+        const fresh = await getResources()
+        setResources(fresh || [])
+      } catch (e) {
+        // ignore — we already saved successfully
+      }
       alert('Guardado OK')
     } catch (err: any) {
       console.error(err)
