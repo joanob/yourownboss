@@ -4,6 +4,7 @@ import { Link, Route } from 'wouter'
 import ResourcesPage from './pages/ResourcesPage'
 import ProductionPage from './pages/ProductionPage'
 import ProductionDetailPage from './pages/ProductionDetailPage'
+import SimulationPage from './pages/SimulationPage'
 import { useAuth } from './contexts/AuthContext'
 
 function App() {
@@ -29,6 +30,9 @@ function App() {
         </Route>
         <Route path="/production/:id">
           {(params: any) => <ProductionDetailPage />}
+        </Route>
+        <Route path="/simulate/:pid">
+          {(params: any) => <SimulationPage />}
         </Route>
         <Route path="/">
           <ResourcesPage />

@@ -114,7 +114,12 @@ const ProductionDetailPage: React.FC = () => {
                 <div style={{display:'flex', gap:8}}>
                   <label style={{width:120}}>Proc ID: <input type="number" value={p.id ?? 0} onChange={(e)=>setProcessField(i,'id', parseInt(e.target.value||'0',10))} /></label>
                   <label style={{flex:1}}>Name: <input value={p.name} onChange={(e)=>setProcessField(i,'name', e.target.value)} /></label>
-                  <button onClick={()=>removeProcess(i)}>Eliminar proceso</button>
+                  <div style={{display:'flex', gap:8}}>
+                    <button onClick={()=>removeProcess(i)}>Eliminar proceso</button>
+                    {(p.id && p.id !== 0) ? (
+                      <Link href={`/simulate/${p.id}`}><button>Simular</button></Link>
+                    ) : null}
+                  </div>
                 </div>
                 <div style={{marginTop:8}}>
                   <strong>Resources</strong>
