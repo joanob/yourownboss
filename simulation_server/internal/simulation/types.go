@@ -2,9 +2,9 @@ package simulation
 
 type SimulationResourceRange struct {
 	ResourceID int64   `json:"resource_id"`
-	MinPrice   float64 `json:"min_price"`
-	MaxPrice   float64 `json:"max_price"`
-	Step       float64 `json:"step"`
+	MinPrice   int64   `json:"min_price"`
+	MaxPrice   int64   `json:"max_price"`
+	Step       int64   `json:"step"`
 	IsOutput   bool    `json:"is_output,omitempty"`
 }
 
