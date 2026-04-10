@@ -16,6 +16,7 @@ import (
 
 	"yourownboss/simulation/internal/auth"
 	"yourownboss/simulation/internal/migrations"
+	"yourownboss/simulation/internal/production"
 	"yourownboss/simulation/internal/resources"
 
 	_ "modernc.org/sqlite"
@@ -76,6 +77,9 @@ func main() {
 
 	// Register resources routes
 	resources.RegisterRoutes(r, db)
+
+	// Register production routes
+	production.RegisterRoutes(r, db)
 
 	// Server config
 	port := os.Getenv("PORT")
