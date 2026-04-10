@@ -151,19 +151,28 @@ func (s *Service) UpdateBuilding(ctx context.Context, db *sql.DB, buildingID int
 	}
 	return nil
 }
+func (s *Service) UpsertBuilding(ctx context.Context, db *sql.DB, dto BuildingDTO) error {
+	if dto.ID == 0 {
+		return errors.New("building id required and must be non-zero")
+	}
+	if dto.Name == "" {
+		return errors.New("building name required")
+	}
 
-func (s *Service) DeleteBuilding(ctx context.Context, db *sql.DB, id int64) error {
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
+	if err := s.UpdateBuilding(ctx, db, dto.ID, dto); err != nil {
+		if err.Error() == "building not found" {
+			return s.CreateBuilding(ctx, db, dto)
+		}
 		return err
 	}
-	if err := s.repo.DeleteBuilding(ctx, tx, id); err != nil {
-		tx.Rollback()
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		tx.Rollback()
-		return err
+	return nil
+}
+
+func (s *Service) BulkUpsertBuildings(ctx context.Context, db *sql.DB, dtos []BuildingDTO) error {
+	for _, b := range dtos {
+		if err := s.UpsertBuilding(ctx, db, b); err != nil {
+			return err
+		}
 	}
 	return nil
 }
