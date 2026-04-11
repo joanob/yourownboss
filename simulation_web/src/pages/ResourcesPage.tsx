@@ -38,7 +38,17 @@ const ResourcesPage: React.FC = () => {
     })
   }
 
-  const addRow = () => setResources((p) => [...p, {id: 0, name: ''}])
+  const nextFreeId = (list: Resource[]) => {
+    const ids = new Set(list.map((r) => Math.max(0, r.id)))
+    let i = 1
+    while (ids.has(i)) i++
+    return i
+  }
+
+  const addRow = () => setResources((p) => {
+    const id = nextFreeId(p)
+    return [...p, {id, name: ''}]
+  })
 
   const removeRow = (index: number) => setResources((p) => p.filter((_, i) => i !== index))
 
@@ -62,8 +72,6 @@ const ResourcesPage: React.FC = () => {
       setSaving(false)
     }
   }
-
-  console.log(resources)
 
   return (
     <div>

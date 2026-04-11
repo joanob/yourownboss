@@ -17,6 +17,8 @@ const ProductionDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [resources, setResources] = useState<Array<{id:number; name:string}>>([])
   const resourcesFetched = useRef(false)
+  const [allBuildings, setAllBuildings] = useState<Building[]>([])
+  const buildingsFetched = useRef(false)
   const buildingFetchedId = useRef<number | null>(null)
 
   // load resources for select dropdown
@@ -31,7 +33,7 @@ const ProductionDetailPage: React.FC = () => {
   useEffect(() => {
     if (!match) return
     if (idParam === 'new') {
-      setBuilding(emptyBuilding())
+      // new building case is handled by the buildings fetch effect
       return
     }
     const id = parseInt(idParam, 10)
@@ -45,9 +47,37 @@ const ProductionDetailPage: React.FC = () => {
     }).catch(() => {}).finally(() => { setLoading(false) })
   }, [match, idParam])
 
+  // load all buildings into state (needed elsewhere)
+  useEffect(() => {
+    if (buildingsFetched.current) return
+    buildingsFetched.current = true
+    api.get('/buildings').then((res) => {
+      const list: Building[] = res.data || []
+      setAllBuildings(list)
+      if (idParam === 'new') {
+        const ids = new Set(list.map((b) => Math.max(0, b.id)))
+        let nid = 1
+        while (ids.has(nid)) nid++
+        setBuilding({ id: nid, name: '', processes: [] })
+      }
+    }).catch(() => {
+      if (idParam === 'new') setBuilding(emptyBuilding())
+    })
+  }, [idParam])
+
   const setField = (field: keyof Building, value: any) => setBuilding(b => ({...b, [field]: value}))
 
-  const addProcess = () => setBuilding(b => ({...b, processes: [...b.processes, {id: undefined, name: '', start_hour: null, end_hour: null, resources: []}]}))
+  const addProcess = () => {
+    setBuilding(b => {
+      const ids = new Set<number>()
+      allBuildings.forEach((bb) => bb.processes.forEach((p) => { const pid = p.id ?? 0; if (pid && pid > 0) ids.add(pid) }))
+      b.processes.forEach((p) => { const pid = p.id ?? 0; if (pid && pid > 0) ids.add(pid) })
+      let nid = 1
+      while (ids.has(nid)) nid++
+      const newProc: Process = { id: nid, name: '', start_hour: null, end_hour: null, resources: [] }
+      return {...b, processes: [...b.processes, newProc]}
+    })
+  }
   const removeProcess = (index: number) => setBuilding(b => ({...b, processes: b.processes.filter((_,i)=>i!==index)}))
 
   const setProcessField = (index: number, field: keyof Process, value: any) => {
