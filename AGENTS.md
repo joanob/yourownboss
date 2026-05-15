@@ -20,12 +20,9 @@ El usuario puede agregar instrucciones debajo de la sección `INSTRUCCIONES-EXTR
 INSTRUCCIONES-EXTRA:
 - Nunca ejecutar `npm` o `go` sin confirmación.
 - Prefiere usar SQLite en modo local.
+- El archivo YOUROWNBOSS.md es un cajón desastre de ideas. Cuando el archivo esté en el contexto, solo se debe hacer caso a la informacíon de ese archivo y a nada más de todo el proyecto. Todos los cambios se harán sobre ese archivo. Es un archivo que contendrá la idea del proyecto, la planificación para desarrollarlo y todas sus especificaciones.
 
 Cuando un agente lea este archivo, debe parsear la sección `INSTRUCCIONES-EXTRA` (si existe) y actuar conforme a ella.
-
-Cómo pedir permiso para ejecutar comandos:
-
-- El agente debe hacer una pregunta explícita y clara al usuario: por ejemplo "¿Autorizas ejecutar `go build ./...` en `simulation_server` ahora?". El usuario debe responder afirmativamente y la autorización se considera única para esa acción.
 
 Notas para desarrolladores / agentes:
 
