@@ -3,33 +3,50 @@
 ## Índice
 
 - [Sobre el juego](#sobre-el-juego)
-- [Dinámica de juego](#dinámica-del-juego)
-- [Estructura de datos (recursos, procesos, edificios)](#estructura-de-datos-recursos-procesos-edificios)
-- [Decisiones técnicas recomendadas](#decisiones-técnicas-recomendadas)
-	- [Backend (Go)](#backend-go)
-	- [Frontend (React / móvil)](#frontend-react--móvil)
-	- [Base de datos y herramientas](#base-de-datos-y-herramientas)
-- [Arquitectura y estructura de carpetas sugerida](#arquitectura-y-estructura-de-carpetas-sugerida)
-- [DTO / DBO / Model: explicación y recomendaciones](#dto--dbo--model-explicación-y-recomendaciones)
-- [Inyección de dependencias en Go (práctica recomendada)](#inyección-de-dependencias-en-go-práctica-recomendada)
-- [API mínima (ejemplos)](#api-mínima-ejemplos)
-- [Próximos pasos y decisiones pendientes](#próximos-pasos-y-decisiones-pendientes)
+	- [Dinámica del juego](#dinámica-del-juego)
+	- [Estructura de datos](#estructura-de-datos)
+	- [Monetización](#monetización)
+	- [Requisitos legales (GDPR)](#requisitos-legales-gdpr)
+- [Backend](#backend)
+	- [Stack tecnológico](#stack-tecnológico)
+	- [Arquitectura y estructura de carpetas](#arquitectura-y-estructura-de-carpetas)
+	- [DBO / Model / DTO](#dbo--model--dto)
+	- [Inyección de dependencias](#inyección-de-dependencias)
+	- [API](#api)
+	- [Base de datos](#base-de-datos)
+- [Frontend](#frontend)
+	- [Stack y decisiones](#stack-y-decisiones)
+	- [Estructura de carpetas](#estructura-de-carpetas)
+	- [Librerías y tooling](#librerías-y-tooling)
+	- [State management y caché](#state-management-y-caché)
+	- [API client y tipos](#api-client-y-tipos)
+	- [PWA y móvil](#pwa-y-móvil)
+- [Simulaciones](#simulaciones)
+	- [Objetivo](#objetivo)
+	- [Modelo de datos](#modelo-de-datos)
+	- [Estructura del proyecto](#estructura-del-proyecto)
+	- [Proceso de fondo](#proceso-de-fondo)
+- [Planificación de desarrollo](#planificación-de-desarrollo)
+	- [Objetivo del MVP](#objetivo-del-mvp)
+	- [Fases y entregables](#fases-y-entregables)
+	- [Tareas técnicas por dominio](#tareas-técnicas-por-dominio)
+	- [Prioridades y criterios de aceptación](#prioridades-y-criterios-de-aceptación)
+	- [Roadmap tentativo](#roadmap-tentativo)
+	- [Riesgos y mitigaciones](#riesgos-y-mitigaciones)
 
 
 ## Sobre el juego
 
 Your Own Boss es un juego web y móvil idle de gestión y producción: producir recursos a partir de otros recursos, venderlos y con el dinero comprar edificios más avanzados. El foco de diseño es juego casual: sesiones cortas (p. ej. 5 minutos) cada varias horas.
 
-
-## Dinámica del juego
+### Dinámica del juego
 
 - El jugador registra un usuario y crea una empresa con dinero inicial.
 - Compra recursos y edificios de producción.
 - Inicia procesos productivos en edificios; cuando el ciclo termina, el jugador pulsa "Obtener" para recoger la salida.
 - Existen edificios de venta (venden a ritmo limitado) y un mercado invariable para compra/venta inmediata.
 
-
-## Estructura de datos
+### Estructura de datos
 
 - Usuarios: id, username, password, ...
 - Empresas: id, id usuario, nombre, dinero, ...
@@ -39,21 +56,21 @@ Your Own Boss es un juego web y móvil idle de gestión y producción: producir 
 
 Ejemplos prácticos están en el repositorio (migraciones y JSON de ejemplo). En la implementación, la tabla SQL puede reflejar DBOs (persistencia), los modelos en memoria pueden agregar estructuras anidadas (edificio -> lista procesos) y los DTOs exponen lo necesario a la API.
 
-## Monetización
+### Monetización
 
 En la primera fase no habrá monetización. Cuando esté todo terminado, perfecto y haya una base de usuarios grande se plantea añadir anuncios no intrusivos. Si el juego consigue llamar la atención de marcas, la mejor forma de publicidad sería que se pudieran producir productos de esas marcas. Por ejemplo, en lugar de producir refresco que se pueda producir la nueva Fanta sabor melón.
 
-## GDPR
+### Requisitos legales (GDPR)
 
-Requisito legal/regulatorio: el proyecto debe cumplir GDPR desde el inicio (consentimiento para trackers, borrado de datos a petición, políticas de privacidad documentadas).
+El proyecto debe cumplir GDPR desde el inicio: consentimiento para trackers, borrado de datos a petición y políticas de privacidad documentadas.
 
 
-## Decisiones técnicas recomendadas
+## Backend
 
-### Backend (Go)
+### Stack tecnológico
 
 - Lenguaje: Go.
-- Router ligero: `chi` 
+- Router ligero: `chi`.
 - Persistencia: SQLite usando `modernc.org/sqlite` para evitar cgo.
 - Consultas generadas: `sqlc` para mantener consultas tipadas y seguras.
 - Logger: `rs/zerolog`.
@@ -61,30 +78,9 @@ Requisito legal/regulatorio: el proyecto debe cumplir GDPR desde el inicio (cons
 
 Razonamiento: esta pila mantiene el binario puro (sin CGO), consultas claras y testables.
 
+### Arquitectura y estructura de carpetas
 
-### Frontend (React / móvil)
-
-React + PWA para ser usada tanto en web como en Android utilizando Web View. Quiero hacer primero la versión web.
-
-El juego debería poderse jugar sin conexión. Luego se sincronizaría con el servidor y se comprobaría que el usuario no ha hecho trampas cambiando la hora para producir más rápido.
-
-Primero desarrollar versión web para tener un MVP, posteriormente añadir funcionalidades PWA y se plantea en el futuro crear una app React Native.
-
-### Base de datos y herramientas
-
-- `modernc.org/sqlite` (evita C y facilita despliegues).
-- `sqlc` para generar tipos/queries.
-- Migraciones manuales
-
-Backups diarios por la noche.
-
-## Backend:
-
-### Arquitectura y estructura de carpetas sugerida
-
-Propongo organizar `internal/` por dominios (cada dominio es un paquete independiente) y dentro de cada dominio mantener las subcarpetas por responsabilidad: `http`, `service`, `repository`, `models` (y opcional `sql` para queries generadas). Esto facilita la navegación y el ownership del código.
-
-Ejemplo de árbol mínimo:
+Organizar `internal/` por dominios (cada dominio es un paquete independiente) y dentro de cada dominio mantener las subcarpetas por responsabilidad: `http`, `service`, `repository`, `models` (y opcional `sql` para queries generadas).
 
 ```
 server/
@@ -111,91 +107,91 @@ server/
 		pkg/             # utilidades compartidas (evitar lógica de dominio aquí)
 ```
 
-Notas y buenas prácticas:
+Buenas prácticas:
 
-- Dependencias acíclicas: mantener el flujo `http -> service -> repository`. Nunca importe `http` desde `service` ni `repository` desde `http`.
-- `models` dentro del dominio contienen tipos de dominio puros; los DTOs para la API pueden vivir en `http` o en `models/dto` según prefieras.
-- Lugar de `sqlc`: puedes generar consultas por dominio (`internal/production/repository/queries.sql` -> package `repository`) para que el código generado quede junto al adaptador DB del dominio.
-- Tipos compartidos (p. ej. errores, utilidades) en `internal/pkg` o `internal/shared` — evita meter reglas de negocio compartidas fuera de los dominios.
-- Inyección/Contructor wiring: en `cmd/api/main.go` crea los repositorios, luego servicios y finalmente handlers. Ejemplo:
+- Dependencias acíclicas: mantener el flujo `http -> service -> repository`. Nunca importar `http` desde `service` ni `repository` desde `http`.
+- `models` dentro del dominio contienen tipos de dominio puros; los DTOs para la API pueden vivir en `http` o en `models/dto`.
+- `sqlc` por dominio: `internal/production/repository/queries.sql` → package `repository`.
+- Tipos compartidos (errores, utilidades) en `internal/pkg` o `internal/shared`.
+- Wiring en `cmd/api/main.go`:
 
-```
+```go
 db := openDB(cfg)
-usersRepo := users_repository.New(db)
-usersSvc := users_service.New(usersRepo)
+usersRepo    := users_repository.New(db)
+usersSvc     := users_service.New(usersRepo)
 usersHandler := users_http.New(usersSvc)
 
 router.Mount("/api/v1/users", usersHandler.Routes())
 ```
 
-- Tests: cada dominio tiene sus propios tests y puedes mockear interfaces de `repository` para probar `service`.
-- Migraciones y esquema global en `internal/db` para mantener orden; las migraciones pueden vivir en `internal/db/migrations` o en `simulation_server/migrations` según el componente que usen.
+- Tests: mockear interfaces de `repository` para probar `service` e mockear servicios para probar controladores.
+- Migraciones en `internal/db/migrations`.
 
-Beneficios de este enfoque:
+### DBO / Model / DTO
 
-- Escalabilidad: añadir un dominio nuevo es directo y evita mezclar responsabilidades.
-- Ownership claro: cada dominio es una unidad de trabajo independiente.
-- Facilitación de `sqlc` por paquete y tests más focalizados.
+- **DBO** (DB Object): estructuras exactamente mapeadas a tablas/columnas (sqlc). No exponer directamente a la API.
+- **Model**: estructuras internas enriquecidas con reglas de negocio (p. ej. `Building` con su lista de `Process`).
+- **DTO** (Data Transfer Object): estructuras para la API pública (request/response), solo lo necesario para el cliente.
 
-
-### DTO / DBO / Model: explicación y recomendaciones
-
-- DBO (DB Object): estructuras exactamente mapeadas a tablas y columnas (usadas por sqlc/generated code). No exponer DBOs directamente a la API si contienen metadatos sensibles.
-- Model: estructuras internas enriquecidas que combinan DBOs y reglas de negocio (p. ej. `Building` con su lista de `Process` ya cargada y métodos de validación).
-- DTO (Data Transfer Object): estructuras para la API pública (request/response). Contienen sólo lo necesario para el cliente y validaciones.
-
-Flujo típico:
-DB <-> DBO (persistencia) -> convertir a Model (reglas) -> convertir a DTO (respuesta API)
+Flujo: `DB <-> DBO (persistencia) → Model (reglas) → DTO (respuesta API)`
 
 Ejemplo: `BuildingDBO` (tabla), `Building` (modelo con procesos cargados), `BuildingDTO` (id, nombre, procesos: []ProcessDTO).
 
+### Inyección de dependencias
 
-### Inyección de dependencias en Go (práctica recomendada)
+Constructor injection con interfaces:
 
-Patrón común en Go: constructor injection con interfaces.
+```go
+// Interfaz en la capa de servicio
+type UserRepo interface {
+    GetByID(ctx context.Context, id int64) (*UserDBO, error)
+}
 
-Ejemplo:
+// Wiring en main.go
+repo    := repository.NewUserRepo(db)
+svc     := service.NewUserService(repo)
+handler := http.NewUserHandler(svc)
+```
 
-- Definir interfaz en la capa de servicios: `type UserRepo interface { GetByID(ctx context.Context, id int64) (*UserDBO, error) }`
-- Implementación concreta en `repository/sql`: `type userRepoSQL struct { db *sql.DB }` que satisface `UserRepo`.
-- En `cmd/api/main.go` construir cosas explícitamente:
-
-	repo := repository.NewUserRepo(db)
-	svc := service.NewUserService(repo)
-	handler := http.NewUserHandler(svc)
-
-Esto permite testear `service` inyectando un mock `UserRepo`.
-
-Opcional: usar un DI container (fx, wire) añade complejidad; recomiendo empezar con constructor injection simple.
-
+Esto permite testear `service` inyectando un mock de `UserRepo`. No se recomienda DI container (fx, wire) hasta que haya necesidad real.
 
 ### API
 
-Autenticación: JWT cookies httpOnly.
+Autenticación: JWT en cookies httpOnly.
 
-Si la respuesta tiene body, devolver un objeto result que tenga el valor o el error.
+Formato de respuesta cuando hay body:
 
-```
+```json
 {
-    value?: any,
-    error?: {
-        code: string,
-        message: string	
+    "value": "...",
+    "error": {
+        "code": "string",
+        "message": "string"
     }
 }
 ```
 
+### Base de datos
+
+- `modernc.org/sqlite` (sin CGO, fácil despliegue).
+- `sqlc` para generar tipos y queries.
+- Migraciones manuales en `internal/db/migrations`.
+- Backups automáticos nocturnos (dump de SQLite a storage).
+- Capa de abstracción DB para facilitar futura migración a PostgreSQL si es necesario.
+
 
 ## Frontend
 
-Propuesta de arquitectura frontend (React + TypeScript, Vite)
+### Stack y decisiones
 
-Objetivo: tener un frontend escalable, tipado y alineado por dominios con el backend (users, resources, production).
+- React + TypeScript + Vite.
+- Prioridad: versión web primero, luego PWA; aplicación móvil (React Native) como posibilidad futura.
+- El juego debe poder jugarse sin conexión. Al reconectar, el servidor valida que no se haya manipulado el tiempo local para producir más rápido.
 
-Estructura sugerida (dominios + responsabilidades):
+### Estructura de carpetas
 
 ```
-web/                     # app web principal
+web/
 	package.json
 	vite.config.ts
 	src/
@@ -203,10 +199,10 @@ web/                     # app web principal
 		layout/               # GameLayout, nav, footer
 		pages/                # entradas de rutas (ProductionPage, ResourcesPage...)
 		components/           # componentes UI genéricos (atoms, molecules)
-		features/             # carpetas por dominio (users, resources, production)
+		features/             # carpetas por dominio
 			users/
 				api.ts            # llamadas al backend (typed)
-				hooks/            # hooks del dominio
+				hooks/
 				components/
 				pages/
 				types.ts
@@ -221,90 +217,77 @@ web/                     # app web principal
 		main.tsx
 		App.tsx
 	public/
-	tests/                  # unit/integration
-
-simulation_web/           # app de simulación si la quieres separada
-packages/                 # (opcional monorepo) shared/ui, shared/types
+	tests/
 ```
 
-Librerías y tooling recomendados
+### Librerías y tooling
 
-- `TypeScript` — mayor seguridad y mejores DX.  
-- `Vite` — dev server rápido.  
-- `react-router` — routing.  
-- `react-query` (TanStack Query) — data fetching y caching.  
-- `react-hook-form` — formularios.  
-- `Vitest + Testing Library` — tests unitarios/integración.  
-- `Playwright` o `Cypress` — e2e.  
-- `ESLint + Prettier` — lint y formateo.  
-- `pnpm` — gestionar monorepo.
+- `react-router` — routing.
+- `react-query` (TanStack Query) — data fetching y caching.
+- `react-hook-form` — formularios.
+- `Vitest + Testing Library` — tests unitarios/integración.
+- `Playwright` o `Cypress` — e2e.
+- `ESLint + Prettier` — lint y formateo.
+- `pnpm` — gestión de paquetes y monorepo.
 
-State management
+### API client y tipos
 
-- Preferir `react-query` para estado asíncrono/cached.  
-- Para estado global (usuario, UI) `React Context + reducer` o `zustand` si necesitas más flexibilidad.  
+- Cliente centralizado en `services/api.ts` (baseURL, interceptors para JWT, manejo de errores).
+- Tipos en `types/api.d.ts` alineados con los DTOs del backend.
 
-API client y tipos
+### PWA y móvil
 
-- Centraliza el cliente en `services/api.ts` (baseURL, interceptors para JWT, manejo de errores).  
-- Genera o mantiene tipos `types/api.d.ts` que reflejen los DTOs del backend para evitar desajustes.
-
-PWA y móvil
-
-- Habilita manifest + Service Worker (Workbox o la configuración de Vite) para PWA.  
-
-CI / quality
-
-- Scripts: `lint`, `test`, `build`.  
-- Integrar checks en CI (lint, tests, build).  
-- Revisión automática de cambios de tipos compartidos si usas monorepo.
-
-Buenas prácticas
-
-- Separar UI (components) de lógica (hooks/services).  
-- Mantener pruebas para flujos críticos (inicio de producción, recoger producto, ventas).  
-- Documentar contratos API en `docs/API.md` y mantener sincronía con `types/` del frontend.
+- Manifest + Service Worker (Workbox o Vite plugin) para PWA.
+- Separar UI (components) de lógica (hooks/services).
+- Mantener pruebas para flujos críticos (inicio de producción, recoger producto, ventas).
 
 ## Simulaciones
 
-Necesito un sistema de simulaciones que me permita probar diferentes valores de tiempo de producción, cantidad de recursos y precio de recursos para buscar un equilibrio entre todos los procesos productivos de manera que todos tengan un beneficio similar.
+El simulador es un proyecto completamente independiente del juego, con su propia base de datos y su propio servidor.
 
-Había pensado tener un proyecto y una base de datos separada para todo esto. Aquí el frontend será muy sencillo, incluso se podría hacer con templ o algo así para no tener un frontend react. El simulador es completamente independiente del juego y correrá en otro servidor.
+### Objetivo
 
-Las dos tablas de datos maestros serían recursos y procesos.
+Probar diferentes valores de tiempo de producción, cantidad de recursos y precio de recursos para buscar un equilibrio entre todos los procesos productivos de manera que todos tengan un beneficio similar.
 
-Luego una tabla de simulaciones con un id, un id de proceso, un beneficio calculado y un tiempo de fabricación. Y por último una tabla de simulacion_recursos donde se indique id, id de simulacion, id de recurso, si es de entrada o de salida, cantidad y precio.
+Ejemplo: simular el cultivo de tomates para un tiempo de entre 1 y 30 segundos, entre 1 y 5 semillas con un precio de entre 1 y 10 y entre 1 y 3 tomates con un precio entre 2 y 200. El programa genera todas las combinaciones posibles, calcula el beneficio de cada una y guarda en base de datos las que superen un umbral especificado. Los resultados se pueden consultar ordenados por diferentes parámetros.
 
-El objetivo es por ejemplo calcular los beneficios que aporta el cultivo de tomates. Entonces indicaría que quiero simular para un tiempo de entre 1 y 30 segundos, entre 1 y 5 semillas con un precio de entre 1 y 10 y entre 1 y 3 tomates con un precio entre 2 y 200. El programa haría todas las posibilidades y calcularía su beneficio. Si el beneficio es mayor a un beneficio especificado, entonces se guarda en base de datos.
+### Modelo de datos
 
-A su vez, el programa debe mostrar los datos de las simulaciones (para cada proceso) y ordenar los datos por diferentes parámetros.
+- `resources` — datos maestros de recursos.
+- `processes` — datos maestros de procesos.
+- `simulations` — id, process_id, beneficio_calculado, tiempo_fabricación.
+- `simulation_resources` — id, simulation_id, resource_id, tipo (entrada/salida), cantidad, precio.
+- `simulation_jobs` — id, process_id, status, started_at, finished_at, last_checkpoint_index, total_combinations.
 
-### Estructura proyecto simulación
+### Estructura del proyecto
 
+```
 simulation_server/
-	cmd/main.go — arranque y wiring (config, DB, logger).
-	internal/api/ — handlers HTTP (endpoints para subir datos, lanzar simulación, consultar resultados).
-	internal/service/ — orquestador de alto nivel (validación, preparar trabajos, políticas de invalidación).
-	internal/worker/ — motor de simulación: worker pool, generación de combinaciones, control de concurrencia, checkpointing.
-	internal/repository/ — adaptadores DB (insert batch, queries, transacciones).
-	internal/types/ — DTOs y tipos compartidos (SimulationRequest, Combination, Result).
-	internal/db/ — migraciones y helpers de conexión.
-	internal/tools/ (opcional) — utilitarios (csv export, compress).
+	cmd/main.go              # arranque y wiring (config, DB, logger)
+	internal/
+		api/                 # handlers HTTP (lanzar simulación, consultar resultados)
+		service/             # orquestador (validación, preparar trabajos)
+		worker/              # motor: worker pool, generación de combinaciones, checkpointing
+		repository/          # adaptadores DB (insert batch, queries, transacciones)
+		types/               # DTOs compartidos (SimulationRequest, Combination, Result)
+		db/                  # migraciones y helpers de conexión
+		tools/               # (opcional) utilidades (csv export, compress)
+```
 
 ### Proceso de fondo
 
-Añadir una tabla ligera simulation_jobs (id, process_id, status, started_at, finished_at, last_checkpoint_index, total_combinations) para:
-- consultar progreso
-- permitir cancelación controlada
-- registrar logs/errors resumidos
+La tabla `simulation_jobs` permite:
+- Consultar progreso de un job en curso.
+- Cancelación controlada.
+- Registro de errores resumidos.
 
-Las combinaciones se generan en streaming para no saturar memoria. Se utilizan goroutines. Se guarda en base de datos cada X registros para no saturar memoria.
+Las combinaciones se generan en streaming para no saturar memoria. Se usan goroutines y se persiste en base de datos cada X registros (batch insert). El frontend del simulador puede ser simple (templ u otro servidor de plantillas en Go).
 
-## Planificación de desarrollo del juego
+## Planificación de desarrollo
 
-### Resumen y objetivo
+### Objetivo del MVP
 
-Objetivo: entregar un MVP jugable (web/PWA) que permita registro de usuario, creación de empresas, compra/venta de recursos, compra de edificios, iniciar procesos productivos y recoger producción. Paralelamente habilitar un servicio de simulaciones independiente para balance y tuning.
+Entregar un MVP jugable (web) que permita registro de usuario, creación de empresas, compra/venta de recursos, compra de edificios, iniciar procesos productivos y recoger producción. El simulador se desarrolla en paralelo para apoyar el balance y tuning de la economía del juego.
 
 ### Fases y entregables (alto nivel)
 
@@ -345,7 +328,7 @@ Objetivo: entregar un MVP jugable (web/PWA) que permita registro de usuario, cre
 	- Ajustes de balance y economía usando los datos de `simulation_server`.
 	- UX polish, tutorial inicial y sistema de onboarding.
 
-### Tareas técnicas detalladas (por dominio)
+### Tareas técnicas por dominio
 
 - Backend (por dominio)
 	- `users`: register/login, password hashing, tests, DTOs.
@@ -360,7 +343,7 @@ Objetivo: entregar un MVP jugable (web/PWA) que permita registro de usuario, cre
 	- Exponer métricas básicas y health-check endpoint.
 	- Documentar variables de entorno y secretos necesarios.
 
-### Prioridades y criterios de aceptación (MVP)
+### Prioridades y criterios de aceptación
 
 - Prioridad alta
 	- Registro/autenticación segura.
@@ -378,22 +361,23 @@ Objetivo: entregar un MVP jugable (web/PWA) que permita registro de usuario, cre
 	- API responde <500ms para endpoints críticos en entorno de dev.
 	- Simulación de ejemplo completa y exportable a CSV.
 
-### Estimaciones y roadmap tentativo
+### Roadmap tentativo
 
-- Sprint 0 (setup): 1 semana — infra dev, DB, seeds, API docs.
-- Sprint 1: 2 semanas — backend usuarios/empresas/recursos/producción básico.
-- Sprint 2: 2 semanas — frontend MVP + integración básica.
-- Sprint 3: 2 semanas — simulador inicial + pruebas de performance.
-- Sprint 4: 1–2 semanas — CI/CD, Docker, backups y pulido.
+| Sprint | Duración | Contenido |
+|--------|----------|-----------|
+| 0 | 1 semana | Setup, DB, seeds, API docs |
+| 1 | 2 semanas | Backend: usuarios, empresas, recursos, producción |
+| 2 | 2 semanas | Frontend MVP + integración |
+| 3 | 2 semanas | Simulador + benchmarks |
+| 4 | 1–2 semanas | CI/CD, Docker, backups, pulido |
 
-Estos son estimados conservadores para una persona con experiencia en Go/React; ajustar según disponibilidad y prioridad.
+Sin plazo fijo — ajustar según disponibilidad.
 
 ### Riesgos y mitigaciones
 
-- Riesgo: SQLite puede limitar concurrencia en producción.
-	- Mitigación: diseñar capa de abstracción DB y plan de migración a PostgreSQL.
-- Riesgo: generación exponencial de combinaciones en simulador.
-	- Mitigación: parametrizar límites, sampling y validaciones previas.
-- Riesgo: cheating offline/time manipulation.
-	- Mitigación: sincronización y validaciones server-side en eventos críticos.
+| Riesgo | Mitigación |
+|--------|------------|
+| SQLite con alta concurrencia en producción | Capa de abstracción DB + plan de migración a PostgreSQL documentado |
+| Explosión combinatoria en el simulador | Límites configurables, sampling, validaciones previas al lanzar job |
+| Cheating offline (manipulación de hora) | Validaciones server-side en eventos críticos al sincronizar |
 
