@@ -4,8 +4,7 @@
 
 - [Sobre el juego](#sobre-el-juego)
 	- [Dinámica del juego](#dinámica-del-juego)
-	- [Estructura de datos](#estructura-de-datos)
-	- [Monetización](#monetización)
+	- [Monetización del juego](#monetización-del-juego)
 	- [Requisitos legales (GDPR)](#requisitos-legales-gdpr)
 - [Backend](#backend)
 	- [Stack tecnológico](#stack-tecnológico)
@@ -22,11 +21,6 @@
 	- [API client y tipos](#api-client-y-tipos)
 	- [Offline y sincronización](#offline-y-sincronización)
 	- [PWA y móvil](#pwa-y-móvil)
-- [Simulaciones](#simulaciones)
-	- [Objetivo](#objetivo)
-	- [Modelo de datos](#modelo-de-datos)
-	- [Estructura del proyecto](#estructura-del-proyecto)
-	- [Proceso de fondo](#proceso-de-fondo)
 - [Esquema de base de datos](#esquema-de-base-de-datos)
 - [Planificación de desarrollo](#planificación-de-desarrollo)
 	- [Objetivo del MVP](#objetivo-del-mvp)
@@ -42,48 +36,24 @@
 
 ## Sobre el juego
 
-Your Own Boss es un juego web y móvil idle de gestión y producción: producir recursos a partir de otros recursos, venderlos y con el dinero comprar edificios más avanzados. El foco de diseño es juego casual: sesiones cortas (p. ej. 5 minutos) cada varias horas.
+Your Own Boss es un juego web y móvil de gestión y producción. El juego consiste en producir recursos a partir de otros recursos, venderlos y con el dinero comprar nuevos edificios de producción y venta para ganar más dinero. El foco de diseño es un juego casual de un jugador que no requiere estar conectado mucho tiempo con un sistema para aprovechar al máximo el tiempo que el usuario no podrá estar conectado.
 
 ### Dinámica del juego
 
-- El jugador registra un usuario y crea una empresa con el dinero inicial configurado por el admin (valor en `.env`). **Un usuario solo puede tener una empresa** (UNIQUE(user_id) en la tabla).
-- Compra recursos en el mercado y adquiere edificios de producción. Los edificios tienen un coste de dinero y un tiempo de construcción; hasta que no finaliza el edificio no está disponible.
-- Selecciona un proceso productivo, elige cuántos ciclos quiere producir y arranca la producción (sin límite de ciclos). No se puede recolectar hasta que hayan transcurrido todos los ciclos (`cycle_time_s × ciclos`).
-- Cuando el tiempo termina, el jugador pulsa "Obtener" para añadir los recursos al inventario.
-- Los edificios tienen niveles. El nivel actúa como multiplicador: un edificio de nivel N produce y consume exactamente N veces la cantidad base por ciclo (el tiempo de ciclo no cambia). Es equivalente a tener N fábricas iguales funcionando en paralelo. **Subir de nivel cuesta dinero (lineal: `purchase_cost × (nuevo_nivel - nivel_actual)`) y siempre toma el mismo tiempo (igual al `construction_time_s` del tipo, independientemente de cuántos niveles se suban)**. Solo se puede mejorar cuando el edificio no está produciendo (status = `idle`).
-- Existen **edificios de venta** (entidad distinta a los de producción). Tienen una lista de recursos que pueden vender, precio de venta por unidad y ritmo máximo de venta (p. ej. vender 10 unidades/segundo × nivel). El usuario decide manualmente cuántas unidades vender desde su inventario. Las unidades se restan del inventario **al iniciar la venta** (no después). Después de que pase el tiempo necesario, recolecta el dinero. **Solo una `sale_run` activa por edificio de venta.**
-- También existe un **mercado con precios fijos** para compra/venta inmediata. Los precios son estáticos, sin fluctuación dinámica. El mercado es ilimitado: se pueden comprar/vender recursos directamente sin restricción de cantidad o horario (distinto de los edificios de venta que tienen ritmo).
-- El inventario es ilimitado y los recursos no caducan.
-- **Ciclos y múltiplos**: el juego funciona en ciclos. Si un proceso produce 3 unidades por ciclo, las cantidades siempre serán múltiplos de 3. Lo mismo aplica para venta: si un edificio de venta vende 3 unidades por ciclo, solo se pueden vender múltiplos de 3.
-- Algunos procesos tienen una ventana horaria: solo pueden iniciarse y ejecutarse dentro de ese rango (p. ej. electricidad solar: 08:00–20:00). **La validación es en la hora local del jugador según su timezone. Si el proceso empieza antes o termina después de la ventana, se rechaza.** El jugador almacena su timezone al registrarse y puede cambiarla solo una vez al mes para evitar abusos.
-- **Validación de recursos**: al iniciar producción, se valida que la empresa tenga suficientes recursos de entrada. No se pueden quedar en rojo (saldo negativo).
+- El jugador registra un usuario y crea una empresa con una cantidad de dinero inicial configurado por el admin (valor en `.env`). Un usuario solo puede tener una empresa.
+- Los recursos se compran en el mercado. Este mercado tiene precios estáticos, es ilimitado y no depende de otros jugadores. Los recursos se venden por lotes y solo se puede vender múltiplos de esa cantidad de lote. Por ejemplo, si 3 unidades de agua se venden por 1 moneda, no es posible tener monedas decimales así que siempre se deben comprar y vender múltiplos de 3 unidades de agua.
+- El inventario almacena los recursos de la empresa. Es ilimitado y los recursos no tienen caducidad.
+- Los edificios de producción y venta tienen un coste y tiempo de construcción. Cuando estén acabados, se podrá empezar a vender y producir. Una empresa puede tener varias instancias del mismo edificio de producción.
+- Los procesos de producción determinan qué recursos se necesitan para producir otros recursos y cuál es el tiempo de producción. El proceso productivo se estructura en ciclos. Por ejemplo, un proceso de producción puede tener un ciclo de 3 segundos en el que se utilizan 5 tomates para fabricar 3 botes de tomates en conserva.
+- El usuario inicia manualmente el proceso productivo indicando el tiempo o la cantidad de ciclos que desea producir. En ese momento, los recursos utilizados se extraen del inventario del jugador. Si el usuario no tiene los recursos suficientes, no es posible producir.
+- A partir de ese momento, el edificio de producción estará produciendo y no podrá ocuparse en nada más. Cuando se acabe el tiempo de producción, el usuario podrá obtener los recursos producidos. En ese momento se añadirán a su inventario y el edificio de producción estará disponible de nuevo para iniciar otro proceso productivo.
+- La mayoría de procesos se pueden iniciar y finalizar en cualquier momento y la única restricción es que la empresa tenga la cantidad de recursos necesaria. Sin embargo, hay algunos procesos que tienen ventanas horarias y no pueden iniciarse o acabar fuera de esas horas. Por ejemplo, si un proceso solo está disponible de 8 a 20, no se podrá iniciar antes de las 8 y no podrá terminar más tarde de las 20. Esta hora depende del huso horario almacenado en la información del usuario. Para evitar abusos, el usuario solo puede cambiar su huso horario una vez cada 30 días.
+- Cuando el edificio no está produciendo se puede subir de nivel. Los niveles actúan como multiplicadores: un edificio de nivel N produce y consume exactamente N veces la cantidad base por ciclo. Es equivalente a tener N fábricas iguales funcionando en paralelo. Se pueden subir varios niveles a la vez si se tiene el dinero y el tiempo necesario para mejorar el edificio es el mismo que para construirlo, independientemente de cuantos niveles se suban. 
+- Los recursos obtenidos se pueden vender en el mercado o en edificios de venta. Los edificios de venta tienen las mismas características que los edificios de producción, pero en lugar de tener procesos productivos tienen procesos de venta en los que los recursos se transforman en dinero. Son más rentables que vender al mercado pero la venta no es inmediata.
 
-### Estructura de datos (entidades principales)
-
-Esta sección describe las entidades conceptuales. El esquema SQL completo está en [Esquema de base de datos](#esquema-de-base-de-datos).
-
-- **users** — usuario del sistema. Roles: `player` y `admin`.
-- **companies** — empresa de un usuario, con saldo de dinero.
-- **resources** — catálogo maestro de recursos (importable vía endpoint JSON). Cada recurso tiene un `master_id` textual único para facilitar imports y ediciones.
-- **production_buildings** — catálogo maestro de tipos de edificio (importable vía endpoint JSON). Definen coste de compra y tiempo de construcción en segundos.
-- **company_buildings** — instancias de edificio de una empresa. Una empresa puede tener múltiples instancias del mismo `building_type` (sin límite). Solo pueden tener una `production_run` activa a la vez. Tienen nivel (multiplicador de entradas y salidas), estado (`constructing` / `idle` / `producing`) y `ready_at` mientras construyen o suben de nivel. Subir de nivel cuesta dinero (lineal: `purchase_cost × (nuevo_nivel - nivel_actual)`) y tiene tiempo de construcción (igual al `construction_time_s` del tipo, independientemente de cuántos niveles se suban).
-- **sale_building_types** — catálogo maestro de tipos de edificio de venta. Define costes y tiempo de construcción, equivalente a `building_types`.
-- **company_sale_buildings** — instancias de edificio de venta de una empresa. Tienen nivel (multiplicador del ritmo de venta), estado (`constructing` / `idle` / `selling`) y `ready_at`. Subir de nivel cuesta dinero y tiempo (igual que en edificios de producción). Solo pueden tener una `sale_run` activa a la vez.
-- **sale_building_type_resources** — configuración maestro: qué recursos vende cada tipo de edificio de venta, a qué precio por unidad y a qué ritmo en unidades/segundo (p. ej. 10 unidades/segundo a nivel 1).
-- **sale_runs** — ejecuciones de venta. Al iniciar, se quitan las unidades del inventario. Registra unidades a vender, precio_por_unidad capturado al inicio, `started_at`, `collect_at` = `started_at + (units_to_sell / (rate_per_second × level))` y dinero ganado. Aunque el admin cambió el precio después, la venta usa el precio capturado al iniciar.
-- **processes** — catálogo maestro de procesos ligados a un `building_type`. Definen `cycle_time_s`, recursos de entrada/salida (cantidad base nivel 1), y opcionalmente `window_start_hour` / `window_end_hour`.
-- **company_inventory** — stock de recursos por empresa. Sin límite ni caducidad.
-- **production_runs** — ejecución de un proceso en un edificio concreto. Registra ciclos solicitados, `started_at`, `collect_at` = `started_at + cycle_time_s × cycles × level` y estado (`running` / `ready` / `collected`).
-- **refresh_tokens** — tokens de refresco vinculados a sesiones de usuario, con hash almacenado en BD.
-
-### Monetización y economía
+### Monetización del juego
 
 **Fase inicial**: sin monetización (juego es free-to-play sin anuncios).
-
-**Dinero en juego**:
-- Dinero inicial: configurable en `.env`, mismo para todos los usuarios, sin límite máximo (hasta `int64`).
-- Fuentes: venta de recursos en el mercado, venta de recursos en edificios de venta, algunos procesos pueden tener ganancia neutra o negativa.
-- Uso: comprar edificios, subir niveles, comprar recursos en el mercado.
 
 **Monetización futura**: cuando el juego esté terminado y con base de usuarios grande, posibles anuncios no intrusivos o publicidad de marcas (ej. producir Fanta en lugar de "refresco genérico").
 
@@ -109,7 +79,7 @@ Razonamiento: esta pila mantiene el binario puro (sin CGO), consultas claras y t
 
 ### Arquitectura y estructura de carpetas
 
-Organizar `internal/` por dominios (cada dominio es un paquete independiente) y dentro de cada dominio mantener las subcarpetas por responsabilidad: `http`, `service`, `repository`, `models` (y opcional `sql` para queries generadas).
+Organizar `internal/` por dominios (cada dominio es un paquete independiente) y dentro de cada dominio mantener las subcarpetas por responsabilidad: `http`, `service`, `repository`, `models` y `sql`. La carpeta `sql` tendrá las queries generadas por sqlc.
 
 ```
 server/
@@ -120,7 +90,7 @@ server/
 			service/       # lógica de negocio, orquestación
 			repository/    # sqlc queries y adaptadores DB
 			models/        # modelos/domain types y validaciones
-			sql/           # (opcional) .sql y generated code by sqlc
+			sql/           # .sql y generated code by sqlc
 		resources/
 			http/
 			service/
@@ -140,19 +110,9 @@ Buenas prácticas:
 
 - Dependencias acíclicas: mantener el flujo `http -> service -> repository`. Nunca importar `http` desde `service` ni `repository` desde `http`.
 - `models` dentro del dominio contienen tipos de dominio puros; los DTOs para la API pueden vivir en `http` o en `models/dto`.
-- `sqlc` por dominio: `internal/production/repository/queries.sql` → package `repository`.
+- `sqlc` por dominio
 - Tipos compartidos (errores, utilidades) en `internal/pkg` o `internal/shared`.
 - Wiring en `cmd/api/main.go`:
-
-```go
-db := openDB(cfg)
-usersRepo    := users_repository.New(db)
-usersSvc     := users_service.New(usersRepo)
-usersHandler := users_http.New(usersSvc)
-
-router.Mount("/api/v1/users", usersHandler.Routes())
-```
-
 - Tests: mockear interfaces de `repository` para probar `service` e mockear servicios para probar controladores.
 - Migraciones en `internal/db/migrations`.
 
@@ -188,9 +148,9 @@ Esto permite testear `service` inyectando un mock de `UserRepo`. No se recomiend
 
 Autenticación: sesión JWT en cookie httpOnly de corta duración (1 minuto) + refresh token en segunda cookie httpOnly.
 
-- El **session token** dura 1 minuto. En cada petición autenticada el middleware lo verifica.
-- Si el session token ha expirado, el cliente reintenta con el **refresh token**. El servidor valida el hash del refresh token contra la tabla `refresh_tokens` en BD, emite un nuevo par de cookies y revoca el token anterior.
-- El refresh token tiene una expiración más larga (p. ej. 30 días) y queda invalidado en BD al renovarse o al hacer logout.
+- El session token dura 1 minuto. En cada petición autenticada el middleware lo verifica sin necesidad de acceder a base de datos.
+- Si el session token ha expirado, el cliente reintenta con el refresh token. El servidor valida el hash del refresh token contra la tabla `refresh_tokens` en BD, emite un nuevo par de cookies y revoca el token anterior.
+- El refresh token tiene una expiración más larga, de 300 días, y queda invalidado en BD al renovarse o al hacer logout.
 - El servidor usa códigos HTTP semánticos para indicar el resultado (200, 201, 400, 401, 403, 404, 409…). Cuando hay error, el body incluye el detalle:
 
 ```json
@@ -204,7 +164,6 @@ Autenticación: sesión JWT en cookie httpOnly de corta duración (1 minuto) + r
 ```
 
 CORS configurado en el middleware de `chi` para aceptar peticiones del dominio del frontend (proyectos completamente separados).
-
 
 ### Base de datos
 
@@ -220,9 +179,9 @@ CORS configurado en el middleware de `chi` para aceptar peticiones del dominio d
 ### Stack y decisiones
 
 - React + TypeScript + Vite.
-- Estilos: componentes custom con **SCSS** (mejor organización que CSS plano para proyectos medianos: variables, anidamiento, mixins).
+- Estilos: componentes custom con SCSS (mejor organización que CSS plano para proyectos medianos: variables, anidamiento, mixins).
 - Prioridad: versión web primero, luego PWA; aplicación móvil (React Native) como posibilidad futura.
-- El juego debe poder jugarse sin conexión. Al reconectar, el servidor valida que no se haya manipulado el tiempo local para producir más rápido.
+- El juego debe poder jugarse sin conexión. Al reconectar, el servidor valida que todas las acciones que haya realizado el usuario sean posibles comprobando que los recursos producidos y el tiempo de producción es coherente.
 
 ### Estructura de carpetas
 
@@ -269,7 +228,7 @@ web/
 ### State management y caché
 
 - `react-query` para estado asíncrono y caché de datos del servidor (inventario, edificios, procesos en curso).
-- `React Context + reducer` para estado global de UI y sesión (usuario autenticado).
+- `React Context + reducer` para estado global de UI y sesión (usuario autenticado y preferencias del usuario).
 - Estado local del temporizador de producción gestionado en el componente/hook correspondiente.
 
 ### API client y tipos
@@ -279,18 +238,16 @@ web/
 
 ### Offline y sincronización
 
-Acciones disponibles sin conexión: iniciar proceso productivo, recolectar producción, consultar inventario y estado de edificios.
+La mayoría de acciones están disponibles sin conexión. Las únicas acciones que necesitan conexión son la autenticación y la creación de empresas.
 
 **Frontend:**
-- El cliente gestiona los `collect_at` localmente y cuenta atrás. No hace polling al servidor; solo llama al servidor cuando el jugador pulsa "Obtener".
-- Esto reduce significativamente la carga de API.
+- El cliente gestiona la cuenta atrás de los procesos de producción o venta activos. Al acabar el tiempo, el usuario emite la acción de obtener recursos o dinero al servidor. Esto reduce significativamente la carga de API.
 - **Caché de datos maestros**: recursos, edificios, procesos y ritmos de venta se cargan al iniciar el juego (en el login o app start) y se cachean localmente, ya que estos datos no cambian frecuentemente.
 
 **Sincronización offline → online:**
-- Estrategia: **Cola de acciones pendientes** (optimistic updates con rollback si el servidor rechaza).
 - Cuando el cliente se queda offline, coloca nuevas acciones en una cola local (transacciones locales en IndexedDB o localStorage).
-- Al reconectar, replaya la cola contra el servidor. Si una acción falla, se marca y el usuario recibe una notificación.
-- Diseño completo pendiente en sesión específica (manejo de conflictos, versionado, etc).
+- Al reconectar, el servidor procesa la cola validando que todas las acciones han sido posibles. Si una acción falla, se marca y el usuario recibe una notificación.
+- Al acabar, se envía al usuario su estado actual sincronizado al servidor.
 
 ### PWA y móvil
 
@@ -298,235 +255,226 @@ Acciones disponibles sin conexión: iniciar proceso productivo, recolectar produ
 - Separar UI (components) de lógica (hooks/services).
 - Mantener pruebas para flujos críticos (inicio de producción, recoger producto, ventas).
 
-## Simulaciones
-
-El simulador es un proyecto completamente independiente del juego, con su propia base de datos y su propio servidor.
-
-### Objetivo
-
-Probar diferentes valores de tiempo de ciclo, cantidad de recursos y precio para buscar un equilibrio entre todos los procesos productivos de manera que todos ofrezcan un beneficio/hora similar.
-
-**Fórmula de beneficio:**
-
-```
-beneficio_por_ciclo = (Σ precio_salida × cantidad_salida) - (Σ precio_entrada × cantidad_entrada)
-beneficio_por_hora  = beneficio_por_ciclo / (cycle_time_s / 3600)
-```
-
-Solo se persisten en BD los resultados cuyo `beneficio_por_hora` estén dentro del abanico especificado al lanzar el job (beneficios mínimos y beneficios máximos). Esto controla el volumen de resultados almacenados sin necesidad de limitar el número de combinaciones.
-
-El simulador **solo simula procesos de producción**, no ventas del inventario ni edificios de venta.
-
-**Visualización y aplicación**: Los resultados se visualizan directamente en el simulador. El admin revisa los resultados y modifica manualmente los datos maestros en `yourownboss` (no hay carga/import automático desde el simulador jamás).
-
-### Modelo de datos
-
-Los datos maestros se importan desde JSON vía endpoint. Cada entidad tiene un `master_id` textual único para facilitar imports, ediciones y referencias entre el juego y el simulador.
-
-- `resources` — datos maestros de recursos (master_id, nombre, categoría, precio_mercado).
-- `processes` — datos maestros de procesos (master_id, nombre, cycle_time_s, inputs, outputs).
-- `simulations` — id, process_id, beneficio_por_hora, cycle_time_s.
-- `simulation_resources` — id, simulation_id, resource_master_id, tipo (entrada/salida), cantidad, precio.
-- `simulation_jobs` — id, process_id, min_profit_per_hour, status, started_at, finished_at, last_checkpoint_index, total_combinations.
-
-### Estructura del proyecto
-
-```
-simulation_server/
-	cmd/main.go              # arranque y wiring (config, DB, logger)
-	internal/
-		api/                 # handlers HTTP (lanzar simulación, consultar resultados)
-		service/             # orquestador (validación, preparar trabajos)
-		worker/              # motor: worker pool, generación de combinaciones, checkpointing
-		repository/          # adaptadores DB (insert batch, queries, transacciones)
-		types/               # DTOs compartidos (SimulationRequest, Combination, Result)
-		db/                  # migraciones y helpers de conexión
-		tools/               # (opcional) utilidades (csv export, compress)
-```
-
-### Proceso de fondo
-
-La tabla `simulation_jobs` permite:
-- Consultar progreso de un job en curso.
-- Cancelación controlada.
-- Registro de errores resumidos.
-
-Las combinaciones se generan en streaming para no saturar memoria. Se usan goroutines y se persiste en base de datos cada X registros (batch insert). El frontend del simulador puede ser simple (templ u otro servidor de plantillas en Go).
-
 ## Esquema de base de datos
 
-Schema SQL del servidor de juego (`server/`). Las cantidades de recursos y precios usan valores enteros para evitar fallos por operaciones con coma flotante. Los campos `master_id` son identificadores textuales únicos para datos maestros importables.
+- Las cantidades de recursos y precios usan valores enteros para evitar fallos por operaciones con coma flotante
+- Los ids son UUIDs para que se puedan generar desde el cliente
+- Los campos `master_id` son identificadores textuales únicos para datos maestros importables.
 
 ```sql
--- ─── DATOS MAESTROS ───────────────────────────────────────────────────────────
+-- DATOS MAESTROS
 
 CREATE TABLE resources (
-    id           INTEGER PRIMARY KEY,
+	id           TEXT PRIMARY KEY,
     master_id    TEXT    NOT NULL UNIQUE,
     name         TEXT    NOT NULL,
     category     TEXT    NOT NULL,
-    market_price INTEGER NOT NULL
+    market_price INTEGER NOT NULL,
+	market_sale_qty INTEGER NOT NULL
 );
 
-CREATE TABLE building_types (
-    id                   INTEGER PRIMARY KEY,
+CREATE TABLE production_buildings (
+	id                   TEXT PRIMARY KEY,
     master_id            TEXT    NOT NULL UNIQUE,
     name                 TEXT    NOT NULL,
-    purchase_cost        INTEGER NOT NULL,
-    construction_time_s  INTEGER NOT NULL   -- nivel 1; el upgrade también usa este valor × nivel
+    construction_cost        INTEGER NOT NULL,
+    construction_time_s  INTEGER NOT NULL
 );
 
--- Un proceso pertenece a un building_type.
--- window_start_hour / window_end_hour: rango horario en que puede ejecutarse (0–23).
--- NULL en ambos = sin restricción horaria.
-CREATE TABLE processes (
-    id                  INTEGER PRIMARY KEY,
+-- Both window_start_hour and window_end_hour must be null or have value
+CREATE TABLE production_processes (
+	id                  TEXT PRIMARY KEY,
     master_id           TEXT    NOT NULL UNIQUE,
-    building_type_id    INTEGER NOT NULL REFERENCES building_types(id),
+	production_building_id    TEXT NOT NULL REFERENCES production_buildings(id),
     name                TEXT    NOT NULL,
     cycle_time_s        INTEGER NOT NULL,
     window_start_hour   INTEGER,
     window_end_hour     INTEGER
 );
 
--- Recursos de entrada de un proceso (cantidad base para nivel 1).
-CREATE TABLE process_inputs (
-    id          INTEGER PRIMARY KEY,
-    process_id  INTEGER NOT NULL REFERENCES processes(id),
-    resource_id INTEGER NOT NULL REFERENCES resources(id),
-    quantity    REAL    NOT NULL
+CREATE TABLE production_process_resources (
+	process_id  TEXT NOT NULL REFERENCES production_processes(id),
+	resource_id TEXT NOT NULL REFERENCES resources(id),
+	is_output BOOLEAN NOT NULL,
+    quantity    INTEGER    NOT NULL,
+	PRIMARY KEY(process_id, resource_id, is_output)
 );
 
--- Recursos de salida de un proceso (cantidad base para nivel 1).
-CREATE TABLE process_outputs (
-    id          INTEGER PRIMARY KEY,
-    process_id  INTEGER NOT NULL REFERENCES processes(id),
-    resource_id INTEGER NOT NULL REFERENCES resources(id),
-    quantity    REAL    NOT NULL
+CREATE TABLE sale_buildings (
+	id                   TEXT PRIMARY KEY,
+    master_id            TEXT    NOT NULL UNIQUE,
+    name                 TEXT    NOT NULL,
+    construction_cost        INTEGER NOT NULL,
+    construction_time_s  INTEGER NOT NULL
 );
 
--- ─── USUARIOS Y AUTENTICACIÓN ─────────────────────────────────────────────────
+CREATE TABLE sale_resources (
+	sale_building_id TEXT NOT NULL REFERENCES sale_buildings(id),
+	resource_id          TEXT NOT NULL REFERENCES resources(id),
+	price_per_unit       INTEGER NOT NULL,
+    units_sold_per_second      INTEGER    NOT NULL,
+	PRIMARY KEY(sale_building_id, resource_id)
+);
 
+-- USUARIOS Y AUTENTICACIÓN
+
+-- roles: 'P' (player) | 'A' (admin)
 CREATE TABLE users (
-    id            INTEGER  PRIMARY KEY,
+	id            TEXT  PRIMARY KEY,
     username      TEXT     NOT NULL UNIQUE,
     email         TEXT     NOT NULL UNIQUE,
-    password_hash TEXT     NOT NULL,          -- argon2id
-    role          TEXT     NOT NULL DEFAULT 'player',  -- 'player' | 'admin'
-    timezone      TEXT     NOT NULL,          -- ej: 'Europe/Madrid', 'America/New_York'
-    created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    password_hash TEXT     NOT NULL,      
+    role          TEXT     NOT NULL DEFAULT 'P',
+    timezone      TEXT     NOT NULL,          
+	last_timezone_modification_at DATETIME,
+	created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	is_deleted INTEGER NOT NULL DEFAULT 0,
+	deleted_at DATETIME
 );
 
 -- El token se almacena como hash (nunca en claro).
 -- revoked_at != NULL → token invalidado (logout o rotación).
 CREATE TABLE refresh_tokens (
-    id          INTEGER  PRIMARY KEY,
-    user_id     INTEGER  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    token_hash  TEXT     NOT NULL UNIQUE,
-    expires_at  DATETIME NOT NULL,
-    revoked_at  DATETIME,
-    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	id          TEXT  PRIMARY KEY,
+	user_id     TEXT  NOT NULL REFERENCES users(id),
+	token_hash  TEXT     NOT NULL UNIQUE,
+	expires_at  DATETIME NOT NULL,
+	revoked_at  DATETIME,
+	created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	is_deleted INTEGER NOT NULL DEFAULT 0,
+	deleted_at DATETIME
 );
 
--- ─── EMPRESAS ─────────────────────────────────────────────────────────────────
+-- EMPRESAS
 
 CREATE TABLE companies (
-    id         INTEGER  PRIMARY KEY,
-    user_id    INTEGER  NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+	id         TEXT  PRIMARY KEY,
+	user_id    TEXT  NOT NULL UNIQUE REFERENCES users(id),
     name       TEXT     NOT NULL,
-    money      REAL     NOT NULL DEFAULT 0,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    money      INTEGER     NOT NULL DEFAULT 0,
+	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	is_deleted INTEGER NOT NULL DEFAULT 0,
+	deleted_at DATETIME
 );
 
--- ─── INVENTARIO ───────────────────────────────────────────────────────────────
-
--- Sin límite de cantidad. Un registro por (empresa, recurso).
 CREATE TABLE company_inventory (
-    id          INTEGER PRIMARY KEY,
-    company_id  INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-    resource_id INTEGER NOT NULL REFERENCES resources(id),
-    quantity    REAL    NOT NULL DEFAULT 0,
-    UNIQUE(company_id, resource_id)
+	id          TEXT PRIMARY KEY,
+	company_id  TEXT NOT NULL REFERENCES companies(id),
+	resource_id TEXT NOT NULL REFERENCES resources(id),
+	quantity    INTEGER    NOT NULL DEFAULT 0,
+	is_deleted INTEGER NOT NULL DEFAULT 0,
+	deleted_at DATETIME,
+	UNIQUE(company_id, resource_id)
 );
 
--- ─── EDIFICIOS ────────────────────────────────────────────────────────────────
+-- PRODUCCIÓN
 
--- status: 'constructing' | 'idle' | 'producing'
--- ready_at: timestamp en que termina construcción o upgrade de nivel (NULL si idle/producing).
--- El nivel multiplica tanto inputs como outputs de cada ciclo.
-CREATE TABLE company_buildings (
-    id               INTEGER  PRIMARY KEY,
-    company_id       INTEGER  NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-    building_type_id INTEGER  NOT NULL REFERENCES building_types(id),
+-- status: 'C' (constructing) | 'I' (idle) | 'P' (producing)
+CREATE TABLE company_production_buildings (
+	id               TEXT  PRIMARY KEY,
+	company_id       TEXT  NOT NULL REFERENCES companies(id),
+	production_building_id TEXT  NOT NULL REFERENCES production_buildings(id),
     level            INTEGER  NOT NULL DEFAULT 1,
-    status           TEXT     NOT NULL DEFAULT 'constructing',
-    ready_at         DATETIME,
-    created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    status           TEXT     NOT NULL DEFAULT 'C',
+    construction_ends_at         DATETIME,
+	created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	is_deleted INTEGER NOT NULL DEFAULT 0,
+	deleted_at DATETIME
 );
 
--- ─── PRODUCCIÓN ───────────────────────────────────────────────────────────────
-
--- collect_at = started_at + (cycle_time_s * cycles_requested * level)
--- status: 'running' | 'ready' | 'collected'
 CREATE TABLE production_runs (
-    id                   INTEGER  PRIMARY KEY,
-    company_building_id  INTEGER  NOT NULL REFERENCES company_buildings(id) ON DELETE CASCADE,
-    process_id           INTEGER  NOT NULL REFERENCES processes(id),
-    cycles_requested     INTEGER  NOT NULL,
+	id                   TEXT  PRIMARY KEY,
+	company_building_id  TEXT  NOT NULL REFERENCES company_production_buildings(id),
+	process_id           TEXT  NOT NULL REFERENCES production_processes(id),
+    production_cycles    INTEGER  NOT NULL,
     started_at           DATETIME NOT NULL,
-    collect_at           DATETIME NOT NULL,
-    status               TEXT     NOT NULL DEFAULT 'running',
-    collected_at         DATETIME
+    ends_at           DATETIME NOT NULL,
+	is_collected INTEGER NOT NULL DEFAULT 0,
+	collected_at         DATETIME,
+	is_deleted INTEGER NOT NULL DEFAULT 0,
+	deleted_at DATETIME
 );
 
--- ─── EDIFICIOS DE VENTA ──────────────────────────────────────────────────────
+-- VENTA
 
--- Catálogo maestro de tipos de edificio de venta (equivalente a building_types pero para venta).
-CREATE TABLE sale_building_types (
-    id                   INTEGER PRIMARY KEY,
-    master_id            TEXT    NOT NULL UNIQUE,
-    name                 TEXT    NOT NULL,
-    purchase_cost        INTEGER NOT NULL,
-    construction_time_s  INTEGER NOT NULL
-);
-
--- Instancias de edificio de venta (equivalente a company_buildings pero para venta).
--- status: 'constructing' | 'idle' | 'selling'
--- El nivel multiplica el ritmo de venta.
+-- status: 'C' (constructing) | 'I' (idle) | 'S' (selling)
 CREATE TABLE company_sale_buildings (
-    id                   INTEGER  PRIMARY KEY,
-    company_id           INTEGER  NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-    sale_building_type_id INTEGER NOT NULL REFERENCES sale_building_types(id),
-    level                INTEGER  NOT NULL DEFAULT 1,
-    status               TEXT     NOT NULL DEFAULT 'constructing',
-    ready_at             DATETIME,
-    created_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	id               TEXT  PRIMARY KEY,
+	company_id       TEXT  NOT NULL REFERENCES companies(id),
+	sale_building_id TEXT  NOT NULL REFERENCES sale_buildings(id),
+    level            INTEGER  NOT NULL DEFAULT 1,
+    status           TEXT     NOT NULL DEFAULT 'C',
+    construction_ends_at         DATETIME,
+	created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	is_deleted INTEGER NOT NULL DEFAULT 0,
+	deleted_at DATETIME
 );
 
--- Configuración maestro: qué recursos puede vender cada tipo de edificio de venta.
--- rate_per_second: ritmo base (nivel 1) en unidades por segundo.
-CREATE TABLE sale_building_type_resources (
-    id                   INTEGER PRIMARY KEY,
-    sale_building_type_id INTEGER NOT NULL REFERENCES sale_building_types(id),
-    resource_id          INTEGER NOT NULL REFERENCES resources(id),
-    price_per_unit       INTEGER NOT NULL,
-    rate_per_second      REAL    NOT NULL
-);
-
--- Ejecuciones de venta (análogo a production_runs pero para edificios de venta).
--- collect_at = started_at + (units_to_sell / (rate_per_second * level))
--- status: 'selling' | 'ready' | 'collected'
 CREATE TABLE sale_runs (
-    id                   INTEGER  PRIMARY KEY,
-    company_sale_building_id INTEGER NOT NULL REFERENCES company_sale_buildings(id) ON DELETE CASCADE,
-    resource_id          INTEGER  NOT NULL REFERENCES resources(id),
-    units_to_sell        REAL     NOT NULL,
+	id                   TEXT  PRIMARY KEY,
+	company_sale_building_id TEXT NOT NULL REFERENCES company_sale_buildings(id),
+	resource_id          TEXT  NOT NULL REFERENCES resources(id),
+    units_to_sell        INTEGER     NOT NULL,
     started_at           DATETIME NOT NULL,
-    collect_at           DATETIME NOT NULL,
-    status               TEXT     NOT NULL DEFAULT 'selling',
-    collected_at         DATETIME,
-    money_earned         REAL
+    ends_at           DATETIME NOT NULL,
+	is_collected INTEGER NOT NULL DEFAULT 0,
+	collected_at         DATETIME,
+	is_deleted INTEGER NOT NULL DEFAULT 0,
+	deleted_at DATETIME
 );
+
+-- Triggers to convert DELETE into soft-delete
+
+CREATE TRIGGER users_before_delete
+BEFORE DELETE ON users
+FOR EACH ROW
+BEGIN
+	UPDATE users SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE id = OLD.id;
+	-- Propagate soft-delete to direct and indirect child rows
+	UPDATE refresh_tokens SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE user_id = OLD.id;
+	UPDATE companies SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE user_id = OLD.id;
+	UPDATE company_inventory SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE company_id IN (SELECT id FROM companies WHERE user_id = OLD.id);
+	UPDATE company_production_buildings SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE company_id IN (SELECT id FROM companies WHERE user_id = OLD.id);
+	UPDATE company_sale_buildings SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE company_id IN (SELECT id FROM companies WHERE user_id = OLD.id);
+	UPDATE production_runs SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE company_building_id IN (SELECT id FROM company_production_buildings WHERE company_id IN (SELECT id FROM companies WHERE user_id = OLD.id));
+	UPDATE sale_runs SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE company_sale_building_id IN (SELECT id FROM company_sale_buildings WHERE company_id IN (SELECT id FROM companies WHERE user_id = OLD.id));
+	SELECT RAISE(IGNORE);
+END;
+
+CREATE TRIGGER companies_before_delete
+BEFORE DELETE ON companies
+FOR EACH ROW
+BEGIN
+	UPDATE companies SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE id = OLD.id;
+	-- Propagate soft-delete to direct and indirect child tables
+	UPDATE company_inventory SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE company_id = OLD.id;
+	UPDATE company_production_buildings SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE company_id = OLD.id;
+	UPDATE company_sale_buildings SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE company_id = OLD.id;
+	UPDATE production_runs SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE company_building_id IN (SELECT id FROM company_production_buildings WHERE company_id = OLD.id);
+	UPDATE sale_runs SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE company_sale_building_id IN (SELECT id FROM company_sale_buildings WHERE company_id = OLD.id);
+	SELECT RAISE(IGNORE);
+END;
+
+CREATE TRIGGER company_production_buildings_before_delete
+BEFORE DELETE ON company_production_buildings
+FOR EACH ROW
+BEGIN
+	UPDATE company_production_buildings SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE id = OLD.id;
+	-- Propagate soft-delete to production runs belonging to this company building
+	UPDATE production_runs SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE company_building_id = OLD.id;
+	SELECT RAISE(IGNORE);
+END;
+
+CREATE TRIGGER company_sale_buildings_before_delete
+BEFORE DELETE ON company_sale_buildings
+FOR EACH ROW
+BEGIN
+	UPDATE company_sale_buildings SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE id = OLD.id;
+	-- Propagate soft-delete to sale runs belonging to this company sale building
+	UPDATE sale_runs SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE company_sale_building_id = OLD.id;
+	SELECT RAISE(IGNORE);
+END;
+
 ```
 
 ## Planificación de desarrollo
