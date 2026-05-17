@@ -40,16 +40,23 @@ Your Own Boss es un juego web y móvil de gestión y producción. El juego consi
 
 ### Dinámica del juego
 
+**Usuarios y empresas**
 - El jugador registra un usuario y crea una empresa con una cantidad de dinero inicial configurado por el admin (valor en `.env`). Un usuario solo puede tener una empresa.
-- Los recursos se compran en el mercado. Este mercado tiene precios estáticos, es ilimitado y no depende de otros jugadores. Los recursos se venden por lotes y solo se puede vender múltiplos de esa cantidad de lote. Por ejemplo, si 3 unidades de agua se venden por 1 moneda, no es posible tener monedas decimales así que siempre se deben comprar y vender múltiplos de 3 unidades de agua.
+- El jugador debe seleccionar un huso horario y si desea modificar el huso horario no podrá modificarlo otra vez hasta pasados 30 días.
+
+**Recursos**
+- Los recursos se compran en el mercado. Este mercado tiene precios estáticos, es ilimitado y no depende de otros jugadores. 
+- Los recursos se venden por lotes y solo se puede vender múltiplos de esa cantidad de lote. Por ejemplo, si 3 unidades de agua se venden por 1 moneda, no es posible tener monedas decimales así que siempre se deben comprar y vender múltiplos de 3 unidades de agua.
 - El inventario almacena los recursos de la empresa. Es ilimitado y los recursos no tienen caducidad.
+
+**Producción y venta**
 - Los edificios de producción y venta tienen un coste y tiempo de construcción. Cuando estén acabados, se podrá empezar a vender y producir. Una empresa puede tener varias instancias del mismo edificio de producción.
 - Los procesos de producción determinan qué recursos se necesitan para producir otros recursos y cuál es el tiempo de producción. El proceso productivo se estructura en ciclos. Por ejemplo, un proceso de producción puede tener un ciclo de 3 segundos en el que se utilizan 5 tomates para fabricar 3 botes de tomates en conserva.
 - El usuario inicia manualmente el proceso productivo indicando el tiempo o la cantidad de ciclos que desea producir. En ese momento, los recursos utilizados se extraen del inventario del jugador. Si el usuario no tiene los recursos suficientes, no es posible producir.
 - A partir de ese momento, el edificio de producción estará produciendo y no podrá ocuparse en nada más. Cuando se acabe el tiempo de producción, el usuario podrá obtener los recursos producidos. En ese momento se añadirán a su inventario y el edificio de producción estará disponible de nuevo para iniciar otro proceso productivo.
-- La mayoría de procesos se pueden iniciar y finalizar en cualquier momento y la única restricción es que la empresa tenga la cantidad de recursos necesaria. Sin embargo, hay algunos procesos que tienen ventanas horarias y no pueden iniciarse o acabar fuera de esas horas. Por ejemplo, si un proceso solo está disponible de 8 a 20, no se podrá iniciar antes de las 8 y no podrá terminar más tarde de las 20. Esta hora depende del huso horario almacenado en la información del usuario. Para evitar abusos, el usuario solo puede cambiar su huso horario una vez cada 30 días.
+- La mayoría de procesos se pueden iniciar y finalizar en cualquier momento y la única restricción es que la empresa tenga la cantidad de recursos necesaria. Sin embargo, hay algunos procesos que tienen ventanas horarias y no pueden iniciarse o acabar fuera de esas horas. Por ejemplo, si un proceso solo está disponible de 8 a 20, no se podrá iniciar antes de las 8 y no podrá terminar más tarde de las 20. Esta hora depende del huso horario almacenado en la información del usuario. 
 - Cuando el edificio no está produciendo se puede subir de nivel. Los niveles actúan como multiplicadores: un edificio de nivel N produce y consume exactamente N veces la cantidad base por ciclo. Es equivalente a tener N fábricas iguales funcionando en paralelo. Se pueden subir varios niveles a la vez si se tiene el dinero y el tiempo necesario para mejorar el edificio es el mismo que para construirlo, independientemente de cuantos niveles se suban. 
-- Los recursos obtenidos se pueden vender en el mercado o en edificios de venta. Los edificios de venta tienen las mismas características que los edificios de producción, pero en lugar de tener procesos productivos tienen procesos de venta en los que los recursos se transforman en dinero. Son más rentables que vender al mercado pero la venta no es inmediata.
+- Los recursos obtenidos se pueden vender en el mercado o en edificios de venta. Los edificios de venta tienen las mismas características que los edificios de producción, pero en lugar de tener procesos productivos tienen procesos de venta en los que los recursos se transforman en dinero. Son más rentables que vender al mercado pero la venta no es inmediata. Al igual que en la producción, cuando se inicie un proceso de venta los recursos se extraen del inventario del jugador y al acabar el usuario podrá recoger el dinero.
 
 ### Monetización del juego
 
@@ -64,6 +71,8 @@ El proyecto debe cumplir GDPR desde el inicio: consentimiento para trackers, bor
 
 ## Backend
 
+Es prioritario que el backend sea lo más rápido posible. Entiendo que SQLite no es la mejor opción pero no quiero tener postgresql que seguramente consuma más recursos de lo que lo hará Go con SQLite.
+
 ### Stack tecnológico
 
 - Lenguaje: Go.
@@ -72,10 +81,12 @@ El proyecto debe cumplir GDPR desde el inicio: consentimiento para trackers, bor
 - Consultas generadas: `sqlc` para mantener consultas tipadas y seguras.
 - Validación de input: `go-playground/validator` en los handlers.
 - Hash de contraseñas: `argon2id` (más resistente a ataques GPU que bcrypt en 2026).
-- Logger: `rs/zerolog`.
+- Logger: `rs/zerolog`. Se guardarán archivos de log de 10MB con rotación
 - Manejo de configuraciones: variables de entorno con un pequeño loader (`envconfig` o similar).
 
 Razonamiento: esta pila mantiene el binario puro (sin CGO), consultas claras y testables.
+
+Se plantea tener Redis o alguna herramienta que reduzca las lecturas de base de datos para mejorar el rendimiento.
 
 ### Arquitectura y estructura de carpetas
 
@@ -246,8 +257,8 @@ La mayoría de acciones están disponibles sin conexión. Las únicas acciones q
 
 **Sincronización offline → online:**
 - Cuando el cliente se queda offline, coloca nuevas acciones en una cola local (transacciones locales en IndexedDB o localStorage).
-- Al reconectar, el servidor procesa la cola validando que todas las acciones han sido posibles. Si una acción falla, se marca y el usuario recibe una notificación.
-- Al acabar, se envía al usuario su estado actual sincronizado al servidor.
+- Al reconectar, el servidor procesa la cola validando que todas las acciones han sido posibles, tanto porque el usuario tiene los recursos o dinero necesarios como que el tiempo que ha pasado es correcto.
+- Al acabar, se envía al usuario su estado actual y un registro de las acciones para indicar si han sido exitosas o erróneas.
 
 ### PWA y móvil
 
@@ -477,209 +488,6 @@ END;
 
 ```
 
-## Planificación de desarrollo
 
-### Objetivo del MVP
+## Endpoints
 
-Entregar un juego web jugable que cubra el ciclo completo: registro → empresa → comprar recursos/edificios → producir → recolectar → vender. El simulador se desarrolla en paralelo desde el principio porque sus datos (precios, tiempos de ciclo) bloquean el balance del juego.
-
-El código existente en `server/`, `simulation_server/` y `web/` es un prototipo previo sin la arquitectura definida aquí. **La Fase 0 incluye auditar ese código** para decidir qué reutilizar y qué reescribir.
-
-**Definition of Done** para cualquier tarea: tests pasando + revisión manual del flujo + documentación actualizada (API.md o este archivo).
-
-### Fases y entregables
-
-- **Fase 0 — Preparación** (~1 semana)
-	- Auditoría del código existente.
-	- Migraciones iniciales alineadas con el esquema de esta documentación.
-	- Seed data de recursos y procesos básicos.
-	- `docs/API.md` con contratos de los endpoints del MVP.
-
-- **Fase 1 — Núcleo backend + simulador básico** (~3 semanas, en paralelo)
-	- Backend: auth (register/login/refresh), companies, resources, building_types, company_buildings, inventory.
-	- Simulador: motor de cálculo, endpoint de import JSON, resultados básicos.
-	- Los valores de precio y tiempo de ciclo del seed se balancean con el simulador.
-
-- **Fase 2 — Producción backend** (~2 semanas)
-	- Endpoints: `production_runs` (start/collect), ventana horaria, state machine.
-	- Endpoint de compra/venta en mercado.
-	- Edificios de venta (pendiente de definir mecánica completa).
-	- Rate limiting en endpoints críticos.
-
-- **Fase 3 — Frontend MVP** (~2–3 semanas)
-	- Auth flow, dashboard empresa, inventario, edificios, producción (start/collect), mercado.
-	- SCSS + componentes custom.
-	- Integración con backend y manejo de errores.
-	- Tests de flujos críticos.
-
-- **Fase 4 — PWA y calidad** (~1–2 semanas)
-	- Service Worker + manifest (acciones offline definidas).
-	- CI: lint/test/build para todos los proyectos.
-	- Entorno de staging.
-	- Backups automáticos y checklist de despliegue.
-
-- **Fase 5 — Pulido** (continuo)
-	- Onboarding, UX polish.
-	- Sincronización offline → online (diseño pendiente).
-	- Métricas y telemetría básica.
-
-### Tareas técnicas por dominio
-
-- `users`: register/login, argon2id hash, refresh tokens, roles (`admin` / `player`).
-- `companies`: create, balance, ownership checks.
-- `resources` + `building_types`: endpoints de catálogo + endpoint de import JSON con `master_id`.
-- `company_buildings`: comprar, estado constructing/idle/producing, nivel (upgrade).
-- `production`: state machine runs (running → ready → collected), validación ventana horaria.
-- `market`: compra/venta inmediata a precio fijo.
-- `simulation`: motor de combinaciones, jobs, checkpointing, resultados.
-- Infra: backups nocturnos, health-check, variables de entorno documentadas.
-
-### Prioridades y criterios de aceptación
-
-**Prioridad alta (MVP bloqueante)**
-- Ciclo completo: registrarse → empresa → comprar recurso → comprar edificio → iniciar proceso → recolectar.
-- Mercado básico operativo.
-- Simulador con datos iniciales balanceados.
-
-**Criterio de aceptación principal**: el usuario puede completar el ciclo completo sin errores y los tiempos de ciclo/precios están balanceados con el simulador.
-
-### Roadmap tentativo
-
-| Sprint | Duración | Contenido |
-|--------|----------|-----------|
-| 0 | 1 semana | Auditoría código, migraciones, seeds, API docs |
-| 1 | 2 semanas | Auth + companies + catálogos + simulador básico |
-| 2 | 2 semanas | Producción + mercado backend |
-| 3 | 2–3 semanas | Frontend MVP |
-| 4 | 1–2 semanas | PWA, CI, staging, backups |
-
-Sin plazo fijo — ajustar según disponibilidad.
-
-### Riesgos y mitigaciones
-
-| Riesgo | Mitigación |
-|--------|------------|
-| SQLite con alta concurrencia en producción | Capa de abstracción DB + plan de migración a PostgreSQL documentado |
-| Explosión combinatoria en el simulador | Solo se persisten resultados > umbral; sin otro límite artificial |
-| Cheating offline (manipulación de hora) | Validaciones server-side en eventos críticos al sincronizar |
-| Deuda técnica del código existente | Auditoría en Fase 0 antes de desarrollar sobre él |
-
-### Fases y entregables (alto nivel)
-
-- Fase 0 — Preparación (1 week)
-	- Definir alcance MVP y criterios de aceptación.
-	- Modelado de datos: tablas principales y migraciones iniciales.
-	- `docs/API.md` con contratos básicos (auth, empresas, recursos, edificios, procesos, simulaciones).
-	- Seed data inicial (`internal/db/seed.sql`).
-
-- Fase 1 — Backend MVP (2–3 weeks)
-	- Endpoints: auth (register/login), empresas (create, list), resources (list, prices), buildings (list, buy), production (start, collect), marketplace (buy/sell).
-	- Implementar persistencia (SQLite + sqlc queries por dominio).
-	- JWT auth con cookies httpOnly y middleware.
-	- Tests unitarios para `service` y pruebas básicas de integración para endpoints críticos.
-	- Documentación de API y ejemplos `curl`.
-
-- Fase 2 — Frontend MVP (2–3 weeks)
-	- Layout principal y `Auth` flow (login/register + persistencia de sesión).
-	- Páginas: Dashboard/Empresa, Resources, Buildings, Production flow (start/collect), Market.
-	- Integración con backend (`services/api.ts`) y manejo de errores/UX mínima.
-	- PWA básico (manifest + service worker) y comportamiento offline mínimo para acciones no críticas.
-	- Tests de componentes críticos (Vitest + Testing Library).
-
-- Fase 3 — Simulaciones (2–4 weeks)
-	- Implementar `simulation_server` con `simulation_jobs`, worker pool y checkpointing.
-	- Endpoints para lanzar job, consultar progreso y descargar resultados.
-	- Pruebas de performance y benchmarks para combinaciones grandes.
-	- Export CSV/JSON de resultados y UI básica para revisar resultados (opcional en `simulation_web`).
-
-- Fase 4 — Calidad, CI/CD y despliegue (1–2 weeks)
-	- CI: `lint`, `test`, `build` para `server`, `simulation_server` y `web`.
-	- Añadir linting, formateo y pre-commit hooks.
-	- Dockerfile(s) para despliegue mínimo y checklist de despliegue.
-	- Mecanismo de backup y plan de migración (SQLite -> PostgreSQL) documentado.
-
-- Fase 5 — Pulido y métricas (continuo)
-	- Telemetría (Prometheus metrics / logs), alertas básicas.
-	- Ajustes de balance y economía usando los datos de `simulation_server`.
-	- UX polish, tutorial inicial y sistema de onboarding.
-
-### Tareas técnicas por dominio
-
-- Backend (por dominio)
-	- `users`: register/login, password hashing, tests, DTOs.
-		- Roles iniciales: `admin` (gestión y mantenimiento) y `player` (usuario estándar). No se incluirá `tester` como rol separado en la primera versión; los testers pueden usar `admin` o cuentas específicas de prueba.
-	- `companies`: create, balances, ownership checks.
-	- `resources`: prices, market feed, seed data.
-	- `production`: start process, process state machine (running/ready/collected), time window rules.
-	- `simulation`: job queue, streaming generator, result persistence.
-
-- Infra/Operaciones
-	- Backups automáticos nocturnos para SQLite (dump y copia a storage).
-	- Exponer métricas básicas y health-check endpoint.
-	- Documentar variables de entorno y secretos necesarios.
-
-### Prioridades y criterios de aceptación
-
-- Prioridad alta
-	- Registro/autenticación segura.
-	- Comprar edificios y recursos.
-	- Iniciar/recoger procesos productivos y ver inventario.
-	- Mercado básico (compra/venta inmediata).
-
-- Prioridad media
-	- API documentada y seed data funcional.
-	- Offline PWA mínimo (cache de assets + último estado conocido).
-	- Simulador básico separable.
-
-- Criterios de aceptación (ejemplos)
-	- Usuario puede completar ciclo completo (registrarse → crear empresa → comprar recurso → iniciar proceso → recoger) sin errores.
-	- API responde <500ms para endpoints críticos en entorno de dev.
-	- Simulación de ejemplo completa y exportable a CSV.
-
-### Roadmap tentativo
-
-| Sprint | Duración | Contenido |
-|--------|----------|-----------|
-| 0 | 1 semana | Setup, DB, seeds, API docs |
-| 1 | 2 semanas | Backend: usuarios, empresas, recursos, producción |
-| 2 | 2 semanas | Frontend MVP + integración |
-| 3 | 2 semanas | Simulador + benchmarks |
-| 4 | 1–2 semanas | CI/CD, Docker, backups, pulido |
-
-Sin plazo fijo — ajustar según disponibilidad.
-
-### Riesgos y mitigaciones
-
-| Riesgo | Mitigación |
-|--------|------------|
-| SQLite con alta concurrencia en producción | Capa de abstracción DB + plan de migración a PostgreSQL documentado |
-| Explosión combinatoria en el simulador | Límites configurables, sampling, validaciones previas al lanzar job |
-| Cheating offline (manipulación de hora) | Validaciones server-side en eventos críticos al sincronizar |
-
-## Decisiones consolidadas
-
-Este documento fija las decisiones sobre el juego y el simulador. Los detalles de backend (endpoints, rate limiting, arquitectura, CI/CD) se definirán en la siguiente fase. Los detalles de frontend (pantallas, componentes, UX) se definirán después.
-
-### Resumen de decisiones por área
-
-**Dinámica de juego**:
-- Edificios pueden subirse de nivel solo cuando no están activos (idle). Tiempo de mejora siempre igual, independiente de niveles.
-- Venta manual: recursos se restan al iniciar, no al terminar. Precio se captura al iniciar y no varía.
-- Ciclos y múltiplos: cantidades siempre son múltiplos de ciclos (si produce 3/ciclo, solo múltiplos de 3).
-- Procesos pueden tener ganancia neutra o negativa para mecánicas especiales.
-- Dinero: hasta `int64`, sin techo adicional.
-- Mercado: ilimitado para compra/venta inmediata, distinto de edificios de venta con ritmo.
-
-**Timezone y validación**:
-- Cada usuario elige timezone al registrarse.
-- Puede cambiar solo una vez al mes.
-- Ventana horaria: valida que inicio Y fin estén dentro del rango.
-
-**Simulador**:
-- Solo simula procesos de producción, no venta.
-- Admin carga datos JSON manualmente (no hay import automático desde el juego).
-- Múltiples jobs en paralelo.
-- Visualización solo en web, sin exportación CSV.
-
-**Logs**:
-- Archivos de 10 MB con rotación.
