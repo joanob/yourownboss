@@ -485,9 +485,49 @@ BEGIN
 	UPDATE sale_runs SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE company_sale_building_id = OLD.id;
 	SELECT RAISE(IGNORE);
 END;
-
 ```
 
 
 ## Endpoints
 
+- POST /api/v1/auth/register — Registra un nuevo usuario y crea la empresa inicial.
+- POST /api/v1/auth/login — Autentica al usuario y emite cookies de sesión/refresh.
+- POST /api/v1/auth/logout — Revoca el refresh token y elimina cookies del cliente.
+- GET /api/v1/users/me — Obtiene el perfil del usuario autenticado.
+- PUT /api/v1/users/me — Actualiza datos del usuario (perfil, timezone, preferencias).
+- GET /api/v1/gamedata — Devuelve datos maestros necesarios al cliente (resources, buildings).
+- POST /api/v1/gamedata - Cargar json con los datos maestros. Solo disponible para admins.
+- GET /api/v1/status — Endpoint de salud y estado básico del servicio.
+
+- GET /api/v1/company — Obtiene datos de la empresa del usuario.
+- POST /api/v1/company — Crea una nueva empresa para el usuario.
+- PUT /api/v1/company — Actualiza datos de la empresa del usuario (nombre, ajustes).
+- DELETE /api/v1/company — Elimina (soft-delete) la empresa.
+
+- GET /api/v1/company/inventory — Lista inventario de recursos de la empresa.
+
+- GET /api/v1/resources — Lista de recursos maestros disponibles en el juego.
+- GET /api/v1/resources/:resource_id — Detalle de un recurso maestro.
+
+- POST /api/v1/market/buy — Comprar recursos al mercado (ajusta inventario y dinero).
+- POST /api/v1/market/sell — Vender recursos al mercado (ajusta inventario y dinero).
+
+- GET /api/v1/production/buildings — Tipos de edificios de producción disponibles.
+- GET /api/v1/production/processes — Procesos productivos maestros y sus ciclos/insumos.
+
+- GET /api/v1/company/production/buildings — Instancias de producción de la empresa.
+- POST /api/v1/company/production/buildings — Construir una nueva instancia.
+- POST /api/v1/company/production/buildings/:id/upgrade — Subir nivel del edificio.
+- POST /api/v1/company/production/buildings/:id/start — Iniciar un proceso productivo.
+- POST /api/v1/company/production/buildings/:id/collect — Recoger productos al finalizar.
+- GET /api/v1/company/production/runs — Listar procesos productivos en curso/histórico.
+- GET /api/v1/company/production/runs/:run_id — Detalle de un run productivo.
+
+- GET /api/v1/sale/buildings — Tipos de edificios de venta disponibles.
+- GET /api/v1/company/sale/buildings — Instancias de venta de la empresa.
+- POST /api/v1/company/sale/buildings — Construir nueva instancia de venta.
+- POST /api/v1/company/sale/buildings/:id/upgrade — Subir nivel del edificio de venta.
+- POST /api/v1/company/sale/buildings/:id/start — Iniciar un proceso de venta.
+- POST /api/v1/company/sale/buildings/:id/collect — Cobrar ingresos al finalizar la venta.
+- GET /api/v1/company/sale/runs — Listar procesos de venta en curso/histórico.
+- GET /api/v1/company/sale/runs/:run_id — Detalle de un run de venta.
