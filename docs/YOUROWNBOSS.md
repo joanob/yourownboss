@@ -3,35 +3,43 @@
 ## Índice
 
 - [Sobre el juego](#sobre-el-juego)
-	- [Dinámica del juego](#dinámica-del-juego)
-	- [Monetización del juego](#monetización-del-juego)
-	- [Requisitos legales (GDPR)](#requisitos-legales-gdpr)
+  - [Dinámica del juego](#dinámica-del-juego)
+  - [Monetización del juego](#monetización-del-juego)
+  - [Requisitos legales (GDPR)](#requisitos-legales-gdpr)
 - [Backend](#backend)
-	- [Stack tecnológico](#stack-tecnológico)
-	- [Arquitectura y estructura de carpetas](#arquitectura-y-estructura-de-carpetas)
-	- [DBO / Model / DTO](#dbo--model--dto)
-	- [Inyección de dependencias](#inyección-de-dependencias)
-	- [API](#api)
-	- [Base de datos](#base-de-datos)
+  - [Stack tecnológico](#stack-tecnológico)
+  - [Arquitectura y estructura de carpetas](#arquitectura-y-estructura-de-carpetas)
+  - [DBO / Model / DTO](#dbo--model--dto)
+  - [Inyección de dependencias](#inyección-de-dependencias)
+  - [API](#api)
+  - [Base de datos](#base-de-datos)
 - [Frontend](#frontend)
-	- [Stack y decisiones](#stack-y-decisiones)
-	- [Estructura de carpetas](#estructura-de-carpetas)
-	- [Librerías y tooling](#librerías-y-tooling)
-	- [State management y caché](#state-management-y-caché)
-	- [API client y tipos](#api-client-y-tipos)
-	- [Offline y sincronización](#offline-y-sincronización)
-	- [PWA y móvil](#pwa-y-móvil)
+  - [Stack y decisiones](#stack-y-decisiones)
+  - [Estructura de carpetas](#estructura-de-carpetas)
+  - [Librerías y tooling](#librerías-y-tooling)
+  - [State management y caché](#state-management-y-caché)
+  - [API client y tipos](#api-client-y-tipos)
+  - [Offline y sincronización](#offline-y-sincronización)
+  - [PWA y móvil](#pwa-y-móvil)
 - [Esquema de base de datos](#esquema-de-base-de-datos)
+- [Endpoints](#endpoints)
+  - [Resumen de endpoints](#resumen-de-endpoints)
+  - [Game](#game)
+  - [Users](#users)
+  - [Company](#company)
+  - [Market](#market)
+  - [Production](#production)
+  - [Sale](#sale)
 - [Planificación de desarrollo](#planificación-de-desarrollo)
-	- [Objetivo del MVP](#objetivo-del-mvp)
-	- [Fases y entregables](#fases-y-entregables)
-	- [Tareas técnicas por dominio](#tareas-técnicas-por-dominio)
-	- [Prioridades y criterios de aceptación](#prioridades-y-criterios-de-aceptación)
-	- [Roadmap tentativo](#roadmap-tentativo)
-	- [Riesgos y mitigaciones](#riesgos-y-mitigaciones)
+  - [Objetivo del MVP](#objetivo-del-mvp)
+  - [Fases y entregables](#fases-y-entregables)
+  - [Tareas técnicas por dominio](#tareas-técnicas-por-dominio)
+  - [Prioridades y criterios de aceptación](#prioridades-y-criterios-de-aceptación)
+  - [Roadmap tentativo](#roadmap-tentativo)
+  - [Riesgos y mitigaciones](#riesgos-y-mitigaciones)
 - [Decisiones consolidadas](#decisiones-consolidadas)
-	- [Resumen de decisiones por área](#resumen-de-decisiones-por-área)
-	- [Preguntas pendientes para siguiente fase](#preguntas-pendientes-para-siguiente-fase)
+  - [Resumen de decisiones por área](#resumen-de-decisiones-por-área)
+  - [Preguntas pendientes para siguiente fase](#preguntas-pendientes-para-siguiente-fase)
 
 
 ## Sobre el juego
@@ -166,7 +174,7 @@ Autenticación: sesión JWT en cookie httpOnly de corta duración (1 minuto) + r
 
 ```json
 {
-    "value": "...",
+    "data": "...",
     "error": {
         "code": "string",
         "message": "string"
@@ -276,162 +284,161 @@ La mayoría de acciones están disponibles sin conexión. Las únicas acciones q
 -- DATOS MAESTROS
 
 CREATE TABLE resources (
-	id           TEXT PRIMARY KEY,
-    master_id    TEXT    NOT NULL UNIQUE,
-    name         TEXT    NOT NULL,
-    category     TEXT    NOT NULL,
-    market_price INTEGER NOT NULL,
-	market_sale_qty INTEGER NOT NULL
+  id              TEXT PRIMARY KEY,
+  master_id       TEXT    NOT NULL UNIQUE,
+  name            TEXT    NOT NULL,
+  market_price    INTEGER NOT NULL,
+  market_sale_qty INTEGER NOT NULL
 );
 
 CREATE TABLE production_buildings (
-	id                   TEXT PRIMARY KEY,
-    master_id            TEXT    NOT NULL UNIQUE,
-    name                 TEXT    NOT NULL,
-    construction_cost        INTEGER NOT NULL,
-    construction_time_s  INTEGER NOT NULL
+  id                  TEXT PRIMARY KEY,
+  master_id           TEXT    NOT NULL UNIQUE,
+  name                TEXT    NOT NULL,
+  construction_cost   INTEGER NOT NULL,
+  construction_time_s INTEGER NOT NULL
 );
 
 -- Both window_start_hour and window_end_hour must be null or have value
 CREATE TABLE production_processes (
-	id                  TEXT PRIMARY KEY,
-    master_id           TEXT    NOT NULL UNIQUE,
-	production_building_id    TEXT NOT NULL REFERENCES production_buildings(id),
-    name                TEXT    NOT NULL,
-    cycle_time_s        INTEGER NOT NULL,
-    window_start_hour   INTEGER,
-    window_end_hour     INTEGER
+  id                     TEXT PRIMARY KEY,
+  master_id              TEXT    NOT NULL UNIQUE,
+  production_building_id TEXT    NOT NULL REFERENCES production_buildings(id),
+  name                   TEXT    NOT NULL,
+  cycle_time_s           INTEGER NOT NULL,
+  window_start_hour      INTEGER,
+  window_end_hour        INTEGER
 );
 
 CREATE TABLE production_process_resources (
-	process_id  TEXT NOT NULL REFERENCES production_processes(id),
-	resource_id TEXT NOT NULL REFERENCES resources(id),
-	is_output BOOLEAN NOT NULL,
-    quantity    INTEGER    NOT NULL,
-	PRIMARY KEY(process_id, resource_id, is_output)
+  process_id  TEXT    NOT NULL REFERENCES production_processes(id),
+  resource_id TEXT    NOT NULL REFERENCES resources(id),
+  is_output   BOOLEAN NOT NULL,
+  quantity    INTEGER NOT NULL,
+  PRIMARY KEY (process_id, resource_id, is_output)
 );
 
 CREATE TABLE sale_buildings (
-	id                   TEXT PRIMARY KEY,
-    master_id            TEXT    NOT NULL UNIQUE,
-    name                 TEXT    NOT NULL,
-    construction_cost        INTEGER NOT NULL,
-    construction_time_s  INTEGER NOT NULL
+  id                  TEXT PRIMARY KEY,
+  master_id           TEXT    NOT NULL UNIQUE,
+  name                TEXT    NOT NULL,
+  construction_cost   INTEGER NOT NULL,
+  construction_time_s INTEGER NOT NULL
 );
 
 CREATE TABLE sale_resources (
-	sale_building_id TEXT NOT NULL REFERENCES sale_buildings(id),
-	resource_id          TEXT NOT NULL REFERENCES resources(id),
-	price_per_unit       INTEGER NOT NULL,
-    units_sold_per_second      INTEGER    NOT NULL,
-	PRIMARY KEY(sale_building_id, resource_id)
+  sale_building_id        TEXT    NOT NULL REFERENCES sale_buildings(id),
+  resource_id             TEXT    NOT NULL REFERENCES resources(id),
+  price_per_unit          INTEGER NOT NULL,
+  units_sold_per_second   INTEGER NOT NULL,
+  PRIMARY KEY (sale_building_id, resource_id)
 );
 
 -- USUARIOS Y AUTENTICACIÓN
 
 -- roles: 'P' (player) | 'A' (admin)
 CREATE TABLE users (
-	id            TEXT  PRIMARY KEY,
-    username      TEXT     NOT NULL UNIQUE,
-    email         TEXT     NOT NULL UNIQUE,
-    password_hash TEXT     NOT NULL,      
-    role          TEXT     NOT NULL DEFAULT 'P',
-    timezone      TEXT     NOT NULL,          
-	last_timezone_modification_at DATETIME,
-	created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	is_deleted INTEGER NOT NULL DEFAULT 0,
-	deleted_at DATETIME
+  id                              TEXT     PRIMARY KEY,
+  username                        TEXT     NOT NULL UNIQUE,
+  email                           TEXT     NOT NULL UNIQUE,
+  password_hash                   TEXT     NOT NULL,
+  role                            TEXT     NOT NULL DEFAULT 'P',
+  timezone                        TEXT     NOT NULL,
+  last_timezone_modification_at   DATETIME,
+  created_at                      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  is_deleted                      INTEGER  NOT NULL DEFAULT 0,
+  deleted_at                      DATETIME
 );
 
 -- El token se almacena como hash (nunca en claro).
 -- revoked_at != NULL → token invalidado (logout o rotación).
 CREATE TABLE refresh_tokens (
-	id          TEXT  PRIMARY KEY,
-	user_id     TEXT  NOT NULL REFERENCES users(id),
-	token_hash  TEXT     NOT NULL UNIQUE,
-	expires_at  DATETIME NOT NULL,
-	revoked_at  DATETIME,
-	created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	is_deleted INTEGER NOT NULL DEFAULT 0,
-	deleted_at DATETIME
+  id          TEXT     PRIMARY KEY,
+  user_id     TEXT     NOT NULL REFERENCES users(id),
+  token_hash  TEXT     NOT NULL UNIQUE,
+  expires_at  DATETIME NOT NULL,
+  revoked_at  DATETIME,
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  is_deleted  INTEGER  NOT NULL DEFAULT 0,
+  deleted_at  DATETIME
 );
 
 -- EMPRESAS
 
 CREATE TABLE companies (
-	id         TEXT  PRIMARY KEY,
-	user_id    TEXT  NOT NULL UNIQUE REFERENCES users(id),
-    name       TEXT     NOT NULL,
-    money      INTEGER     NOT NULL DEFAULT 0,
-	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	is_deleted INTEGER NOT NULL DEFAULT 0,
-	deleted_at DATETIME
+  id         TEXT     PRIMARY KEY,
+  user_id    TEXT     NOT NULL UNIQUE REFERENCES users(id),
+  name       TEXT     NOT NULL,
+  money      INTEGER  NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  is_deleted INTEGER  NOT NULL DEFAULT 0,
+  deleted_at DATETIME
 );
 
 CREATE TABLE company_inventory (
-	id          TEXT PRIMARY KEY,
-	company_id  TEXT NOT NULL REFERENCES companies(id),
-	resource_id TEXT NOT NULL REFERENCES resources(id),
-	quantity    INTEGER    NOT NULL DEFAULT 0,
-	is_deleted INTEGER NOT NULL DEFAULT 0,
-	deleted_at DATETIME,
-	UNIQUE(company_id, resource_id)
+  id          TEXT    PRIMARY KEY,
+  company_id  TEXT    NOT NULL REFERENCES companies(id),
+  resource_id TEXT    NOT NULL REFERENCES resources(id),
+  quantity    INTEGER NOT NULL DEFAULT 0,
+  is_deleted  INTEGER NOT NULL DEFAULT 0,
+  deleted_at  DATETIME,
+  UNIQUE (company_id, resource_id)
 );
 
 -- PRODUCCIÓN
 
 -- status: 'C' (constructing) | 'I' (idle) | 'P' (producing)
 CREATE TABLE company_production_buildings (
-	id               TEXT  PRIMARY KEY,
-	company_id       TEXT  NOT NULL REFERENCES companies(id),
-	production_building_id TEXT  NOT NULL REFERENCES production_buildings(id),
-    level            INTEGER  NOT NULL DEFAULT 1,
-    status           TEXT     NOT NULL DEFAULT 'C',
-    construction_ends_at         DATETIME,
-	created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	is_deleted INTEGER NOT NULL DEFAULT 0,
-	deleted_at DATETIME
+  id                     TEXT     PRIMARY KEY,
+  company_id             TEXT     NOT NULL REFERENCES companies(id),
+  production_building_id TEXT     NOT NULL REFERENCES production_buildings(id),
+  level                  INTEGER  NOT NULL DEFAULT 1,
+  status                 TEXT     NOT NULL DEFAULT 'C',
+  construction_ends_at   DATETIME,
+  created_at             DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  is_deleted             INTEGER  NOT NULL DEFAULT 0,
+  deleted_at             DATETIME
 );
 
 CREATE TABLE production_runs (
-	id                   TEXT  PRIMARY KEY,
-	company_building_id  TEXT  NOT NULL REFERENCES company_production_buildings(id),
-	process_id           TEXT  NOT NULL REFERENCES production_processes(id),
-    production_cycles    INTEGER  NOT NULL,
-    started_at           DATETIME NOT NULL,
-    ends_at           DATETIME NOT NULL,
-	is_collected INTEGER NOT NULL DEFAULT 0,
-	collected_at         DATETIME,
-	is_deleted INTEGER NOT NULL DEFAULT 0,
-	deleted_at DATETIME
+  id                 TEXT     PRIMARY KEY,
+  company_building_id TEXT    NOT NULL REFERENCES company_production_buildings(id),
+  process_id         TEXT     NOT NULL REFERENCES production_processes(id),
+  production_cycles  INTEGER  NOT NULL,
+  started_at         DATETIME NOT NULL,
+  ends_at            DATETIME NOT NULL,
+  is_collected       INTEGER  NOT NULL DEFAULT 0,
+  collected_at       DATETIME,
+  is_deleted         INTEGER  NOT NULL DEFAULT 0,
+  deleted_at         DATETIME
 );
 
 -- VENTA
 
 -- status: 'C' (constructing) | 'I' (idle) | 'S' (selling)
 CREATE TABLE company_sale_buildings (
-	id               TEXT  PRIMARY KEY,
-	company_id       TEXT  NOT NULL REFERENCES companies(id),
-	sale_building_id TEXT  NOT NULL REFERENCES sale_buildings(id),
-    level            INTEGER  NOT NULL DEFAULT 1,
-    status           TEXT     NOT NULL DEFAULT 'C',
-    construction_ends_at         DATETIME,
-	created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	is_deleted INTEGER NOT NULL DEFAULT 0,
-	deleted_at DATETIME
+  id                 TEXT     PRIMARY KEY,
+  company_id         TEXT     NOT NULL REFERENCES companies(id),
+  sale_building_id   TEXT     NOT NULL REFERENCES sale_buildings(id),
+  level              INTEGER  NOT NULL DEFAULT 1,
+  status             TEXT     NOT NULL DEFAULT 'C',
+  construction_ends_at DATETIME,
+  created_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  is_deleted         INTEGER  NOT NULL DEFAULT 0,
+  deleted_at         DATETIME
 );
 
 CREATE TABLE sale_runs (
-	id                   TEXT  PRIMARY KEY,
-	company_sale_building_id TEXT NOT NULL REFERENCES company_sale_buildings(id),
-	resource_id          TEXT  NOT NULL REFERENCES resources(id),
-    units_to_sell        INTEGER     NOT NULL,
-    started_at           DATETIME NOT NULL,
-    ends_at           DATETIME NOT NULL,
-	is_collected INTEGER NOT NULL DEFAULT 0,
-	collected_at         DATETIME,
-	is_deleted INTEGER NOT NULL DEFAULT 0,
-	deleted_at DATETIME
+  id                        TEXT     PRIMARY KEY,
+  company_sale_building_id  TEXT     NOT NULL REFERENCES company_sale_buildings(id),
+  resource_id               TEXT     NOT NULL REFERENCES resources(id),
+  units_to_sell             INTEGER  NOT NULL,
+  started_at                DATETIME NOT NULL,
+  ends_at                   DATETIME NOT NULL,
+  is_collected              INTEGER  NOT NULL DEFAULT 0,
+  collected_at              DATETIME,
+  is_deleted                INTEGER  NOT NULL DEFAULT 0,
+  deleted_at                DATETIME
 );
 
 -- Triggers to convert DELETE into soft-delete
@@ -440,94 +447,831 @@ CREATE TRIGGER users_before_delete
 BEFORE DELETE ON users
 FOR EACH ROW
 BEGIN
-	UPDATE users SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE id = OLD.id;
-	-- Propagate soft-delete to direct and indirect child rows
-	UPDATE refresh_tokens SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE user_id = OLD.id;
-	UPDATE companies SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE user_id = OLD.id;
-	UPDATE company_inventory SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE company_id IN (SELECT id FROM companies WHERE user_id = OLD.id);
-	UPDATE company_production_buildings SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE company_id IN (SELECT id FROM companies WHERE user_id = OLD.id);
-	UPDATE company_sale_buildings SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE company_id IN (SELECT id FROM companies WHERE user_id = OLD.id);
-	UPDATE production_runs SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE company_building_id IN (SELECT id FROM company_production_buildings WHERE company_id IN (SELECT id FROM companies WHERE user_id = OLD.id));
-	UPDATE sale_runs SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE company_sale_building_id IN (SELECT id FROM company_sale_buildings WHERE company_id IN (SELECT id FROM companies WHERE user_id = OLD.id));
-	SELECT RAISE(IGNORE);
+  UPDATE users
+  SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP
+  WHERE id = OLD.id;
+
+  -- Propagate soft-delete to direct and indirect child rows
+  UPDATE refresh_tokens
+  SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP
+  WHERE user_id = OLD.id;
+
+  UPDATE companies
+  SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP
+  WHERE user_id = OLD.id;
+
+  UPDATE company_inventory
+  SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP
+  WHERE company_id IN (SELECT id FROM companies WHERE user_id = OLD.id);
+
+  UPDATE company_production_buildings
+  SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP
+  WHERE company_id IN (SELECT id FROM companies WHERE user_id = OLD.id);
+
+  UPDATE company_sale_buildings
+  SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP
+  WHERE company_id IN (SELECT id FROM companies WHERE user_id = OLD.id);
+
+  UPDATE production_runs
+  SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP
+  WHERE company_building_id IN (
+    SELECT id FROM company_production_buildings
+    WHERE company_id IN (SELECT id FROM companies WHERE user_id = OLD.id)
+  );
+
+  UPDATE sale_runs
+  SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP
+  WHERE company_sale_building_id IN (
+    SELECT id FROM company_sale_buildings
+    WHERE company_id IN (SELECT id FROM companies WHERE user_id = OLD.id)
+  );
+
+  SELECT RAISE(IGNORE);
 END;
 
 CREATE TRIGGER companies_before_delete
 BEFORE DELETE ON companies
 FOR EACH ROW
 BEGIN
-	UPDATE companies SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE id = OLD.id;
-	-- Propagate soft-delete to direct and indirect child tables
-	UPDATE company_inventory SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE company_id = OLD.id;
-	UPDATE company_production_buildings SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE company_id = OLD.id;
-	UPDATE company_sale_buildings SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE company_id = OLD.id;
-	UPDATE production_runs SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE company_building_id IN (SELECT id FROM company_production_buildings WHERE company_id = OLD.id);
-	UPDATE sale_runs SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE company_sale_building_id IN (SELECT id FROM company_sale_buildings WHERE company_id = OLD.id);
-	SELECT RAISE(IGNORE);
+  UPDATE companies
+  SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP
+  WHERE id = OLD.id;
+
+  -- Propagate soft-delete to direct and indirect child tables
+  UPDATE company_inventory
+  SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP
+  WHERE company_id = OLD.id;
+
+  UPDATE company_production_buildings
+  SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP
+  WHERE company_id = OLD.id;
+
+  UPDATE company_sale_buildings
+  SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP
+  WHERE company_id = OLD.id;
+
+  UPDATE production_runs
+  SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP
+  WHERE company_building_id IN (
+    SELECT id FROM company_production_buildings WHERE company_id = OLD.id
+  );
+
+  UPDATE sale_runs
+  SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP
+  WHERE company_sale_building_id IN (
+    SELECT id FROM company_sale_buildings WHERE company_id = OLD.id
+  );
+
+  SELECT RAISE(IGNORE);
 END;
 
 CREATE TRIGGER company_production_buildings_before_delete
 BEFORE DELETE ON company_production_buildings
 FOR EACH ROW
 BEGIN
-	UPDATE company_production_buildings SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE id = OLD.id;
-	-- Propagate soft-delete to production runs belonging to this company building
-	UPDATE production_runs SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE company_building_id = OLD.id;
-	SELECT RAISE(IGNORE);
+  UPDATE company_production_buildings
+  SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP
+  WHERE id = OLD.id;
+
+  -- Propagate soft-delete to production runs belonging to this company building
+  UPDATE production_runs
+  SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP
+  WHERE company_building_id = OLD.id;
+
+  SELECT RAISE(IGNORE);
 END;
 
 CREATE TRIGGER company_sale_buildings_before_delete
 BEFORE DELETE ON company_sale_buildings
 FOR EACH ROW
 BEGIN
-	UPDATE company_sale_buildings SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE id = OLD.id;
-	-- Propagate soft-delete to sale runs belonging to this company sale building
-	UPDATE sale_runs SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE company_sale_building_id = OLD.id;
-	SELECT RAISE(IGNORE);
+  UPDATE company_sale_buildings
+  SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP
+  WHERE id = OLD.id;
+
+  -- Propagate soft-delete to sale runs belonging to this company sale building
+  UPDATE sale_runs
+  SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP
+  WHERE company_sale_building_id = OLD.id;
+
+  SELECT RAISE(IGNORE);
 END;
 ```
 
 
 ## Endpoints
 
+### Resumen de endpoints
+
+**Game**
+- GET /api/v1/status — Endpoint de salud y estado básico del servicio.
+- GET /api/v1/gamedata — Devuelve datos maestros necesarios al cliente (resources, buildings).
+- POST /api/v1/gamedata - Cargar json con los datos maestros. Solo disponible para admins.
+- GET /api/v1/resources — Lista de recursos maestros disponibles en el juego.
+- GET /api/v1/resources/:resource_id — Detalle de un recurso maestro.
+- GET /api/v1/production/buildings — Tipos de edificios de producción con sus procesos productivos y sus recursos.
+- GET /api/v1/production/buildings/:building_id — Detalle de un edificio de producción con sus procesos productivos y sus recursos.
+- GET /api/v1/sale/buildings — Tipos de edificios de venta disponibles y los recursos que venden.
+- GET /api/v1/sale/buildings/:building_id — Detalle de un edificio de venta y los recursos que vende.
+
+**Users**
 - POST /api/v1/auth/register — Registra un nuevo usuario y crea la empresa inicial.
 - POST /api/v1/auth/login — Autentica al usuario y emite cookies de sesión/refresh.
 - POST /api/v1/auth/logout — Revoca el refresh token y elimina cookies del cliente.
 - GET /api/v1/users/me — Obtiene el perfil del usuario autenticado.
 - PUT /api/v1/users/me — Actualiza datos del usuario (perfil, timezone, preferencias).
-- GET /api/v1/gamedata — Devuelve datos maestros necesarios al cliente (resources, buildings).
-- POST /api/v1/gamedata - Cargar json con los datos maestros. Solo disponible para admins.
-- GET /api/v1/status — Endpoint de salud y estado básico del servicio.
 
+**Company**
 - GET /api/v1/company — Obtiene datos de la empresa del usuario.
 - POST /api/v1/company — Crea una nueva empresa para el usuario.
 - PUT /api/v1/company — Actualiza datos de la empresa del usuario (nombre, ajustes).
 - DELETE /api/v1/company — Elimina (soft-delete) la empresa.
-
 - GET /api/v1/company/inventory — Lista inventario de recursos de la empresa.
 
-- GET /api/v1/resources — Lista de recursos maestros disponibles en el juego.
-- GET /api/v1/resources/:resource_id — Detalle de un recurso maestro.
-
+**Market**
 - POST /api/v1/market/buy — Comprar recursos al mercado (ajusta inventario y dinero).
 - POST /api/v1/market/sell — Vender recursos al mercado (ajusta inventario y dinero).
 
-- GET /api/v1/production/buildings — Tipos de edificios de producción disponibles.
-- GET /api/v1/production/processes — Procesos productivos maestros y sus ciclos/insumos.
-
+**Production**
 - GET /api/v1/company/production/buildings — Instancias de producción de la empresa.
 - POST /api/v1/company/production/buildings — Construir una nueva instancia.
 - POST /api/v1/company/production/buildings/:id/upgrade — Subir nivel del edificio.
 - POST /api/v1/company/production/buildings/:id/start — Iniciar un proceso productivo.
 - POST /api/v1/company/production/buildings/:id/collect — Recoger productos al finalizar.
-- GET /api/v1/company/production/runs — Listar procesos productivos en curso/histórico.
-- GET /api/v1/company/production/runs/:run_id — Detalle de un run productivo.
 
-- GET /api/v1/sale/buildings — Tipos de edificios de venta disponibles.
+**Sale**
 - GET /api/v1/company/sale/buildings — Instancias de venta de la empresa.
 - POST /api/v1/company/sale/buildings — Construir nueva instancia de venta.
 - POST /api/v1/company/sale/buildings/:id/upgrade — Subir nivel del edificio de venta.
 - POST /api/v1/company/sale/buildings/:id/start — Iniciar un proceso de venta.
 - POST /api/v1/company/sale/buildings/:id/collect — Cobrar ingresos al finalizar la venta.
-- GET /api/v1/company/sale/runs — Listar procesos de venta en curso/histórico.
-- GET /api/v1/company/sale/runs/:run_id — Detalle de un run de venta.
+
+### Game
+
+**GET /api/v1/status**
+
+Informa del estado del servidor, su versión y el estado de la conexión a base de datos.
+
+Response 200 OK
+```json
+{
+  "data": {
+    "status": "ok",
+    "version": "0.1.0",
+    "db_connected": true
+  }
+}
+```
+
+**GET /api/v1/gamedata**
+
+Devuelve todos los datos del juego: recursos, edificios de producción con sus procesos y recursos y edificios de venta con sus recursos.
+
+Response 200 OK
+```json
+{
+  "data": {
+    "resources": [
+      {
+        "id": "res-water",
+        "master_id": "water",
+        "name": "Water",
+        "market_price": 10,
+        "market_sale_qty": 3
+      }
+    ],
+    "production_buildings": [
+      {
+        "id": "pb-1",
+        "master_id": "pb_basic",
+        "name": "Factory",
+        "construction_cost": 100,
+        "construction_time_s": 120,
+        "processes": [
+          {
+            "id": "proc-1",
+            "master_id": "proc_tomato_can",
+            "name": "Tomato Can",
+            "cycle_time_s": 3,
+            "inputs": [
+              {
+                "resource_id": "res-tomato",
+                "quantity": 5
+              }
+            ],
+            "outputs": [
+              {
+                "resource_id": "res-tomato_can",
+                "quantity": 3
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "sale_buildings": [
+      {
+        "id": "sb-1",
+        "master_id": "sb_shop",
+        "name": "Shop",
+        "construction_cost": 50,
+        "construction_time_s": 120,
+        "resources": [
+          {
+            "resource_id": "res-tomato",
+            "units_sold_per_second": 1,
+            "price_per_unit": 15
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**POST /api/v1/gamedata** (admin)
+
+Carga los datos del juego al servidor: recursos, edificios de producción con sus procesos y recursos y edificios de venta con sus recursos.
+
+Request
+```json
+{
+  "resources": [
+    {
+      "id": "res-water",
+      "master_id": "water",
+      "name": "Water",
+      "market_price": 10,
+      "market_sale_qty": 3
+    }
+  ],
+  "production_buildings": [
+    {
+      "id": "pb-1",
+      "master_id": "pb_basic",
+      "name": "Factory",
+      "construction_cost": 100,
+      "construction_time_s": 120,
+      "processes": [
+        {
+          "id": "proc-1",
+          "master_id": "proc_tomato_can",
+          "name": "Tomato Can",
+          "cycle_time_s": 3,
+          "window_start_hour": 5000,
+          "window_end_hour": 6000,
+          "inputs": [
+            {
+              "resource_id": "res-tomato",
+              "quantity": 5
+            }
+          ],
+          "outputs": [
+            {
+              "resource_id": "res-tomato_can",
+              "quantity": 3
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "sale_buildings": [
+    {
+      "id": "sb-1",
+      "master_id": "sb_shop",
+      "name": "Shop",
+      "construction_cost": 50,
+      "construction_time_s": 120,
+      "resources": [
+        {
+          "resource_id": "res-tomato",
+          "units_sold_per_second": 1,
+          "price_per_unit": 15
+        }
+      ]
+    }
+  ]
+}
+```
+
+Response 201 Created
+```json
+{
+  "data": {
+    "imported": true,
+    "counts": {
+      "resources": 10,
+      "buildings": 5,
+      "processes": 12
+    }
+  }
+}
+```
+
+**GET /api/v1/resources**
+
+Devuelve la lista de recursos.
+
+Response 200 OK
+```json
+{
+  "data": [
+    {
+      "id": "res-water",
+      "master_id": "water",
+      "name": "Water",
+      "market_price": 10,
+      "market_sale_qty": 3
+    }
+  ]
+}
+```
+
+**GET /api/v1/production/buildings**
+
+Devuelve la lista de edificios de producción con sus procesos y recursos.
+
+Response 200 OK
+```json
+{
+  "data": [
+    {
+      "id": "pb-1",
+      "master_id": "pb_basic",
+      "name": "Factory",
+      "construction_cost": 100,
+      "construction_time_s": 600,
+      "processes": [
+        {
+          "id": "proc-1",
+          "name": "Tomato Can",
+          "cycle_time_s": 3,
+          "window_start_hour": 5000,
+          "window_end_hour": 6000,
+          "inputs": [
+            {
+              "resource_id": "res-tomato",
+              "quantity": 5
+            }
+          ],
+          "outputs": [
+            {
+              "resource_id": "res-tomato_can",
+              "quantity": 3
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+**GET /api/v1/sale/buildings**
+
+Devuelve la lista de edificios de venta y sus recursos.
+
+Response 200 OK
+```json
+{
+  "data": [
+    {
+      "id": "sb-1",
+      "master_id": "sb_shop",
+      "name": "Shop",
+      "construction_cost": 50,
+      "resources": [
+        {
+          "resource_id": "res-tomato",
+          "units_sold_per_second": 1,
+          "price_per_unit": 15
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Users
+
+**POST /api/v1/auth/register**
+
+Registra un nuevo usuario.
+
+Request 201 Created
+```json
+{
+  "username": "player1",
+  "email": "player1@example.com",
+  "password": "s3cret",
+  "timezone": "Europe/Madrid"
+}
+```
+
+Response:
+```json
+{
+  "data": {
+    "id": "uuid-user-1",
+    "username": "player1",
+    "email": "player1@example.com",
+    "timezone": "Europe/Madrid",
+    "created_at": "2026-05-01T10:00:00Z"
+  }
+}
+```
+
+**POST /api/v1/auth/login**
+
+Inicia sesión a un usuario.
+
+Request:
+```json
+{
+  "username": "player1",
+  "password": "s3cret"
+}
+```
+
+Response 201 Created (sets cookies):
+```json
+{
+  "data": {
+    "user": {
+      "id": "uuid-user-1",
+      "username": "player1",
+      "email": "player1@example.com",
+      "timezone": "Europe/Madrid",
+      "created_at": "2026-05-01T10:00:00Z"
+    },
+    "session_expires_at": "2026-05-17T12:34:56Z"
+  }
+}
+```
+
+**POST /api/v1/auth/logout**
+
+Finaliza la sesión de un usuario.
+
+Request: {}
+
+Response 200 OK:
+
+**GET /api/v1/users/me**
+
+Devuelve los datos del usuario a partir de su sesión.
+
+Response 200 OK:
+```json
+{
+  "data": {
+    "id": "uuid-user-1",
+    "username": "player1",
+    "email": "player1@example.com",
+    "timezone": "Europe/Madrid",
+    "created_at": "2026-05-01T10:00:00Z"
+  }
+}
+```
+
+**PUT /api/v1/users/me**
+
+Actualiza los datos del usuario.
+
+Request:
+```json
+{
+  "timezone": "Europe/Madrid"
+}
+```
+
+Response 200 OK:
+```json
+{
+  "data": {
+    "id": "uuid-user-1",
+    "username": "player1",
+    "email": "player1@example.com",
+    "timezone": "Europe/Madrid",
+    "created_at": "2026-05-01T10:00:00Z"
+  }
+}
+```
+
+### Company
+
+**GET /api/v1/company**
+
+Obtiene la empresa del usuario.
+
+Response 200 OK
+```json
+{
+  "data": {
+    "id": "uuid-co-1",
+    "user_id": "uuid-user-1",
+    "name": "Mi Empresa",
+    "money": 1000,
+    "created_at": "2026-05-01T10:00:00Z"
+  }
+}
+```
+
+**POST /api/v1/company**
+
+Crea una empresa.
+
+Request
+```json
+{
+  "name": "Mi Empresa"
+}
+```
+
+Response 201 Created:
+```json
+{
+  "data": {
+    "id": "uuid-co-1",
+    "user_id": "uuid-user-1",
+    "name": "Mi Empresa",
+    "money": 1000,
+    "created_at": "2026-05-01T10:00:00Z"
+  }
+}
+```
+
+**PUT /api/v1/company**
+
+Modifica el nombre de la empresa del usuario.
+
+Request:
+```json
+{
+  "name": "Nuevo Nombre"
+}
+```
+
+Response 200 OK:
+```json
+{
+  "data": {
+    "id": "uuid-co-1",
+    "user_id": "uuid-user-1",
+    "name": "Nuevo Nombre",
+    "money": 1000,
+    "created_at": "2026-05-01T10:00:00Z"
+  }
+}
+```
+
+**DELETE /api/v1/company**
+
+Elimina la empresa del usuario.
+
+Request: {}
+
+Response 200 OK
+
+**GET /api/v1/company/inventory**
+
+Devuelve el estado del inventario de la empresa del usuario.
+
+Response:
+```json
+{
+  "data": [
+    {
+      "resource_id": "res-water",
+      "quantity": 120
+    },
+    {
+      "resource_id": "res-tomato",
+      "quantity": 30
+    }
+  ]
+}
+```
+
+### Market
+
+**POST /api/v1/market/buy**
+
+Compra recursos. Los recursos se añaden al inventario y se resta su coste del dinero de la empresa
+
+Request:
+```json
+{
+  "resource_id": "res-water",
+  "quantity": 30
+}
+```
+
+Response 200 OK
+
+**POST /api/v1/market/sell**
+
+Vende recursos. Los recursos se restan del inventario y se suman las ganancias al dinero de la empresa
+
+Request:
+```json
+{
+  "resource_id": "res-tomato",
+  "quantity": 9
+}
+```
+
+Response 200 OK
+
+### Production
+
+**GET /api/v1/company/production/buildings**
+
+Devuelve la lista de edificios de producción que tiene la empresa y su estado actual.
+
+Response 200 OK
+```json
+{
+  "data": [
+    {
+      "id": "cb-1",
+      "production_building_id": "pb-1",
+      "level": 1,
+      "status": "P",
+      "construction_ends_at": "2026-05-01T10:00:00Z",
+      "active_run": {
+        "id": "run-1",
+        "process_id": "proc-1",
+        "production_cycles": 3,
+        "started_at": "2026-05-17T12:00:00Z",
+        "ends_at": "2026-05-17T12:00:09Z",
+        "is_collected": false
+      }
+    }
+  ]
+}
+```
+
+**POST /api/v1/company/production/buildings**
+
+Construye un nuevo edificio de producción. Devuelve los datos del edificio de producción creado
+
+Request 201 Created
+```json
+{
+  "production_building_id": "pb-1"
+}
+```
+
+Response:
+```json
+{
+  "data": {
+    "id": "cb-1",
+    "production_building_id": "pb-1",
+    "level": 1,
+    "status": "P",
+    "construction_ends_at": "2026-05-01T10:00:00Z",
+    "active_run": {
+      "id": "run-1",
+      "process_id": "proc-1",
+      "production_cycles": 3,
+      "started_at": "2026-05-17T12:00:00Z",
+      "ends_at": "2026-05-17T12:00:09Z",
+      "is_collected": false
+    }
+  }
+}
+```
+
+**POST /api/v1/company/production/buildings/:id/upgrade**
+
+Sube de nivel un edificio de producción de la empresa
+
+Request:
+```json
+{
+  "levels": 1
+}
+```
+
+Response 200 OK
+
+**POST /api/v1/company/production/buildings/:id/start**
+
+Inicia la producción en un edificio
+
+Request:
+```json
+{
+  "process_id": "proc-1",
+  "cycles": 3
+}
+```
+
+Response 200 OK
+
+**POST /api/v1/company/production/buildings/:id/collect**
+
+Recoge los recursos producidos por un proceso productivo que ha terminado.
+
+Request: {}
+
+Response 200 OK
+
+### Sale
+
+**GET /api/v1/company/sale/buildings**
+
+Devuelve la lista de edificios de venta que tiene la empresa y su estado actual.
+
+Response 200 OK
+```json
+{
+  "data": [
+    {
+      "id": "csb-1",
+      "sale_building_id": "sb-1",
+      "level": 1,
+      "status": "S",
+      "construction_ends_at": "2026-05-01T10:00:00Z",
+      "active_run": {
+        "id": "srun-1",
+        "resource_id": "res-juice",
+        "units_to_sell": 10,
+        "started_at": "2026-05-17T12:00:00Z",
+        "ends_at": "2026-05-17T12:00:10Z",
+        "is_collected": false
+      }
+    }
+  ]
+}
+```
+
+**POST /api/v1/company/sale/buildings**
+
+Construye un edificio de venta. Devuelve los datos del edificio de venta
+
+Request 201 Created
+```json
+{
+  "sale_building_id": "sb-1"
+}
+```
+
+Response:
+```json
+{
+  "data": {
+    "id": "csb-1",
+    "sale_building_id": "sb-1",
+    "level": 1,
+    "status": "S",
+    "construction_ends_at": "2026-05-01T10:00:00Z",
+    "active_run": {
+      "id": "srun-1",
+      "resource_id": "res-juice",
+      "units_to_sell": 10,
+      "started_at": "2026-05-17T12:00:00Z",
+      "ends_at": "2026-05-17T12:00:10Z",
+      "is_collected": false
+    }
+  }
+}
+```
+
+**POST /api/v1/company/sale/buildings/:id/upgrade**
+
+Sube de nivel un edificio de venta.
+
+Request:
+```json
+{
+  "levels": 1
+}
+```
+
+Response 200 OK
+
+**POST /api/v1/company/sale/buildings/:id/start**
+
+Inicia el proceso de venta de un edificio de venta
+
+Request:
+```json
+{
+  "resource_id": "res-juice",
+  "units": 10
+}
+```
+
+Response 200 OK
+
+**POST /api/v1/company/sale/buildings/:id/collect**
+
+Recoge los beneficios de un proceso de venta que ha terminado.
+
+Request: {}
+
+Response 200 OK
