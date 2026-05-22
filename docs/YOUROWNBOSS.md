@@ -916,7 +916,15 @@ Finaliza la sesión de un usuario.
 
 Request: {}
 
-Response 200 OK:
+Response 200 OK
+```json
+{
+  "data": {
+    "logged_out": true,
+    "user_id": "uuid-user-1"
+  }
+}
+```
 
 **GET /api/v1/users/me**
 
@@ -1069,6 +1077,25 @@ Request:
 ```
 
 Response 200 OK
+```json
+{
+  "data": {
+    "company": {
+      "id": "uuid-co-1",
+      "user_id": "uuid-user-1",
+      "name": "Mi Empresa",
+      "money": 700,
+      "created_at": "2026-05-01T10:00:00Z"
+    },
+    "inventory": [
+      {
+        "resource_id": "res-water",
+        "quantity": 150
+      }
+    ]
+  }
+}
+```
 
 **POST /api/v1/market/sell**
 
@@ -1083,6 +1110,25 @@ Request:
 ```
 
 Response 200 OK
+```json
+{
+  "data": {
+    "company": {
+      "id": "uuid-co-1",
+      "user_id": "uuid-user-1",
+      "name": "Mi Empresa",
+      "money": 1015,
+      "created_at": "2026-05-01T10:00:00Z"
+    },
+    "inventory": [
+      {
+        "resource_id": "res-tomato",
+        "quantity": 21
+      }
+    ]
+  }
+}
+```
 
 ### Production
 
@@ -1133,14 +1179,7 @@ Response:
     "level": 1,
     "status": "P",
     "construction_ends_at": "2026-05-01T10:00:00Z",
-    "active_run": {
-      "id": "run-1",
-      "process_id": "proc-1",
-      "production_cycles": 3,
-      "started_at": "2026-05-17T12:00:00Z",
-      "ends_at": "2026-05-17T12:00:09Z",
-      "is_collected": false
-    }
+    "active_run": null
   }
 }
 ```
@@ -1157,6 +1196,24 @@ Request:
 ```
 
 Response 200 OK
+```json
+{
+  "data": {
+    "building": {
+      "id": "cb-1",
+      "production_building_id": "pb-1",
+      "level": 2,
+      "status": "C",
+      "construction_ends_at": "2026-05-22T14:45:00Z",
+      "active_run": null
+    },
+    "company": {
+      "id": "uuid-co-1",
+      "money": 900
+    }
+  }
+}
+```
 
 **POST /api/v1/company/production/buildings/:id/start**
 
@@ -1171,6 +1228,33 @@ Request:
 ```
 
 Response 200 OK
+```json
+{
+  "data": {
+    "building": {
+      "id": "cb-1",
+      "production_building_id": "pb-1",
+      "level": 1,
+      "status": "P",
+      "construction_ends_at": null,
+      "active_run": {
+        "id": "run-1",
+        "process_id": "proc-1",
+        "production_cycles": 3,
+        "started_at": "2026-05-22T14:30:00Z",
+        "ends_at": "2026-05-22T14:30:09Z",
+        "is_collected": false
+      }
+    },
+    "inventory": [
+      {
+        "resource_id": "res-tomato",
+        "quantity": 45
+      }
+    ]
+  }
+}
+```
 
 **POST /api/v1/company/production/buildings/:id/collect**
 
@@ -1179,6 +1263,26 @@ Recoge los recursos producidos por un proceso productivo que ha terminado.
 Request: {}
 
 Response 200 OK
+```json
+{
+  "data": {
+    "building": {
+      "id": "cb-1",
+      "production_building_id": "pb-1",
+      "level": 1,
+      "status": "I",
+      "construction_ends_at": null,
+      "active_run": null
+    },
+    "inventory": [
+      {
+        "resource_id": "res-tomato_can",
+        "quantity": 10
+      }
+    ]
+  }
+}
+```
 
 ### Sale
 
@@ -1229,14 +1333,7 @@ Response:
     "level": 1,
     "status": "S",
     "construction_ends_at": "2026-05-01T10:00:00Z",
-    "active_run": {
-      "id": "srun-1",
-      "resource_id": "res-juice",
-      "units_to_sell": 10,
-      "started_at": "2026-05-17T12:00:00Z",
-      "ends_at": "2026-05-17T12:00:10Z",
-      "is_collected": false
-    }
+    "active_run": null
   }
 }
 ```
@@ -1253,6 +1350,24 @@ Request:
 ```
 
 Response 200 OK
+```json
+{
+  "data": {
+    "building": {
+      "id": "csb-1",
+      "sale_building_id": "sb-1",
+      "level": 2,
+      "status": "C",
+      "construction_ends_at": "2026-05-22T14:45:00Z",
+      "active_run": null
+    },
+    "company": {
+      "id": "uuid-co-1",
+      "money": 950
+    }
+  }
+}
+```
 
 **POST /api/v1/company/sale/buildings/:id/start**
 
@@ -1267,6 +1382,33 @@ Request:
 ```
 
 Response 200 OK
+```json
+{
+  "data": {
+    "building": {
+      "id": "csb-1",
+      "sale_building_id": "sb-1",
+      "level": 1,
+      "status": "S",
+      "construction_ends_at": null,
+      "active_run": {
+        "id": "srun-1",
+        "resource_id": "res-juice",
+        "units_to_sell": 10,
+        "started_at": "2026-05-17T12:00:00Z",
+        "ends_at": "2026-05-17T12:00:10Z",
+        "is_collected": false
+      }
+    },
+    "inventory": [
+      {
+        "resource_id": "res-juice",
+        "quantity": 40
+      }
+    ]
+  }
+}
+```
 
 **POST /api/v1/company/sale/buildings/:id/collect**
 
@@ -1275,3 +1417,21 @@ Recoge los beneficios de un proceso de venta que ha terminado.
 Request: {}
 
 Response 200 OK
+```json
+{
+  "data": {
+    "building": {
+      "id": "csb-1",
+      "sale_building_id": "sb-1",
+      "level": 1,
+      "status": "I",
+      "construction_ends_at": null,
+      "active_run": null
+    },
+    "company": {
+      "id": "uuid-co-1",
+      "money": 1150
+    }
+  }
+}
+```
