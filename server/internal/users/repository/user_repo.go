@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"time"
 
 	"github.com/joanob/yourownboss/internal/db/gen"
 	"github.com/rs/zerolog/log"
@@ -12,11 +11,11 @@ import (
 
 // UserRepository define la interfaz para operaciones de usuario en la BD
 type UserRepository interface {
-	CreateUser(ctx context.Context, id, username, email, passwordHash, role string, timezone *string) error
+	CreateUser(ctx context.Context, params *gen.CreateUserParams) (*gen.User, error)
 	GetByID(ctx context.Context, id string) (*gen.User, error)
 	GetByUsername(ctx context.Context, username string) (*gen.User, error)
 	GetByEmail(ctx context.Context, email string) (*gen.User, error)
-	UpdateUser(ctx context.Context, id string, timezone *string, lastTimezoneModAt *time.Time) error
+	UpdateUser(ctx context.Context, params *gen.UpdateUserParams) (*gen.User, error)
 	SoftDeleteUser(ctx context.Context, id string) error
 	ExistsByUsername(ctx context.Context, username string) (bool, error)
 	ExistsByEmail(ctx context.Context, email string) (bool, error)
@@ -35,29 +34,30 @@ func NewUserRepository(queries *gen.Queries) UserRepository {
 }
 
 // CreateUser inserta un nuevo usuario en la BD
-func (r *userRepository) CreateUser(ctx context.Context, id, username, email, passwordHash, role string, timezone *string) error {
+func (r *userRepository) CreateUser(ctx context.Context, params *gen.CreateUserParams) (*gen.User, error) {
 	logger := log.With().
-		Str("user_id", id).
-		Str("username", username).
-		Str("email", email).
+		Str("user_id", params.ID).
+		Str("username", params.Username).
+		Str("email", params.Email).
 		Logger()
 
-	err := r.queries.CreateUser(ctx, gen.CreateUserParams{
-		ID:           id,
-		Username:     username,
-		Email:        email,
-		PasswordHash: passwordHash,
-		Role:         role,
-		Timezone:     timezone,
-	})
+	err := r.queries.CreateUser(ctx, *params)
 
 	if err != nil {
 		logger.Error().Err(err).Msg("Error creando usuario en BD")
-		return fmt.Errorf("error creando usuario: %w", err)
+		return nil, fmt.Errorf("error creando usuario: %w", err)
 	}
 
 	logger.Info().Msg("Usuario creado en BD")
-	return nil
+
+	// Retrieve the created user
+	user, err := r.queries.GetUserByID(ctx, params.ID)
+	if err != nil {
+		logger.Error().Err(err).Msg("Error obteniendo usuario recién creado")
+		return nil, fmt.Errorf("error obteniendo usuario: %w", err)
+	}
+
+	return &user, nil
 }
 
 // GetByID obtiene un usuario por su ID
@@ -106,24 +106,28 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*gen.Use
 }
 
 // UpdateUser actualiza los datos del usuario (timezone)
-func (r *userRepository) UpdateUser(ctx context.Context, id string, timezone *string, lastTimezoneModAt *time.Time) error {
+func (r *userRepository) UpdateUser(ctx context.Context, params *gen.UpdateUserParams) (*gen.User, error) {
 	logger := log.With().
-		Str("user_id", id).
+		Str("user_id", params.ID).
 		Logger()
 
-	err := r.queries.UpdateUser(ctx, gen.UpdateUserParams{
-		Timezone:                   timezone,
-		LastTimezoneModificationAt: lastTimezoneModAt,
-		ID:                         id,
-	})
+	err := r.queries.UpdateUser(ctx, *params)
 
 	if err != nil {
 		logger.Error().Err(err).Msg("Error actualizando usuario")
-		return fmt.Errorf("error actualizando usuario: %w", err)
+		return nil, fmt.Errorf("error actualizando usuario: %w", err)
 	}
 
 	logger.Info().Msg("Usuario actualizado")
-	return nil
+
+	// Retrieve the updated user
+	user, err := r.queries.GetUserByID(ctx, params.ID)
+	if err != nil {
+		logger.Error().Err(err).Msg("Error obteniendo usuario actualizado")
+		return nil, fmt.Errorf("error obteniendo usuario: %w", err)
+	}
+
+	return &user, nil
 }
 
 // SoftDeleteUser marca un usuario como borrado (soft delete)
