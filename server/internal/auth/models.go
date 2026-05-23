@@ -2,6 +2,8 @@ package auth
 
 import (
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 // SessionTokenClaims estructura para el JWT de sesión corta (1 minuto)
@@ -14,6 +16,31 @@ type SessionTokenClaims struct {
 	IssuedAt  int64   `json:"iat"`        // Unix timestamp
 }
 
+// Implementar interfaz jwt.Claims para SessionTokenClaims
+func (c SessionTokenClaims) GetExpirationTime() (*jwt.NumericDate, error) {
+	return jwt.NewNumericDate(time.Unix(c.ExpiresAt, 0)), nil
+}
+
+func (c SessionTokenClaims) GetIssuedAt() (*jwt.NumericDate, error) {
+	return jwt.NewNumericDate(time.Unix(c.IssuedAt, 0)), nil
+}
+
+func (c SessionTokenClaims) GetNotBefore() (*jwt.NumericDate, error) {
+	return nil, nil
+}
+
+func (c SessionTokenClaims) GetIssuer() (string, error) {
+	return "", nil
+}
+
+func (c SessionTokenClaims) GetSubject() (string, error) {
+	return c.UserID, nil
+}
+
+func (c SessionTokenClaims) GetAudience() (jwt.ClaimStrings, error) {
+	return jwt.ClaimStrings{}, nil
+}
+
 // RefreshTokenClaims estructura para el JWT de refresco (300 días)
 // Se almacena como hash en BD y se valida buscándolo en cache o BD
 type RefreshTokenClaims struct {
@@ -22,6 +49,31 @@ type RefreshTokenClaims struct {
 	VerificationString string `json:"verification_string"` // hash para validar en cache/BD
 	ExpiresAt          int64  `json:"exp"`
 	IssuedAt           int64  `json:"iat"`
+}
+
+// Implementar interfaz jwt.Claims para RefreshTokenClaims
+func (c RefreshTokenClaims) GetExpirationTime() (*jwt.NumericDate, error) {
+	return jwt.NewNumericDate(time.Unix(c.ExpiresAt, 0)), nil
+}
+
+func (c RefreshTokenClaims) GetIssuedAt() (*jwt.NumericDate, error) {
+	return jwt.NewNumericDate(time.Unix(c.IssuedAt, 0)), nil
+}
+
+func (c RefreshTokenClaims) GetNotBefore() (*jwt.NumericDate, error) {
+	return nil, nil
+}
+
+func (c RefreshTokenClaims) GetIssuer() (string, error) {
+	return "", nil
+}
+
+func (c RefreshTokenClaims) GetSubject() (string, error) {
+	return c.UserID, nil
+}
+
+func (c RefreshTokenClaims) GetAudience() (jwt.ClaimStrings, error) {
+	return jwt.ClaimStrings{}, nil
 }
 
 // SessionData estructura para almacenar sesiones en cache
