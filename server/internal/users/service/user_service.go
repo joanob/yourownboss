@@ -6,11 +6,16 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/joanob/yourownboss/internal/auth"
 	"github.com/joanob/yourownboss/internal/db/gen"
 	"github.com/joanob/yourownboss/internal/users/repository"
 	"github.com/rs/zerolog/log"
 )
+
+// PasswordManager interface for dependency injection (allows mocking in tests)
+type PasswordManager interface {
+	HashPassword(password string) (string, error)
+	VerifyPassword(password, hash string) bool
+}
 
 // UserService defines the business logic for user operations.
 type UserService interface {
@@ -51,13 +56,13 @@ type UserUpdateRequest struct {
 // userService implements UserService.
 type userService struct {
 	userRepo        repository.UserRepository
-	passwordManager *auth.PasswordManager
+	passwordManager PasswordManager
 }
 
 // NewUserService creates a new user service with dependency injection.
 func NewUserService(
 	userRepo repository.UserRepository,
-	passwordManager *auth.PasswordManager,
+	passwordManager PasswordManager,
 ) UserService {
 	return &userService{
 		userRepo:        userRepo,

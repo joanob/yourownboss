@@ -14,6 +14,27 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// PasswordManager interface for dependency injection (allows mocking in tests)
+type PasswordManager interface {
+	HashPassword(password string) (string, error)
+	VerifyPassword(password, hash string) bool
+}
+
+// JWTManager interface for dependency injection (allows mocking in tests)
+type JWTManager interface {
+	GenerateSessionToken(userID, sessionID string, companyID *string) (string, time.Time, error)
+	GenerateRefreshToken(userID, sessionID string) (string, string, time.Time, error)
+	ValidateSessionToken(token string) (*auth.SessionTokenClaims, error)
+	ValidateRefreshToken(token string) (*auth.RefreshTokenClaims, error)
+}
+
+// SessionCache interface for dependency injection (allows mocking in tests)
+type SessionCache interface {
+	Store(sessionID string, data auth.SessionData)
+	Get(sessionID string) (auth.SessionData, bool)
+	Revoke(sessionID string)
+}
+
 // AuthService defines the authentication business logic.
 type AuthService interface {
 	// Login authenticates a user with username and password.
@@ -49,18 +70,18 @@ type User struct {
 type authService struct {
 	userRepo        repository.UserRepository
 	sessionRepo     auth.UserSessionRepository
-	passwordManager *auth.PasswordManager
-	jwtManager      *auth.JWTManager
-	sessionCache    *auth.SessionCache
+	passwordManager PasswordManager
+	jwtManager      JWTManager
+	sessionCache    SessionCache
 }
 
 // NewAuthService creates a new auth service with dependency injection.
 func NewAuthService(
 	userRepo repository.UserRepository,
 	sessionRepo auth.UserSessionRepository,
-	passwordManager *auth.PasswordManager,
-	jwtManager *auth.JWTManager,
-	sessionCache *auth.SessionCache,
+	passwordManager PasswordManager,
+	jwtManager JWTManager,
+	sessionCache SessionCache,
 ) AuthService {
 	return &authService{
 		userRepo:        userRepo,
