@@ -74,15 +74,23 @@ func main() {
 	gamedataCache := cache.NewGamedataCache()
 	sessionCache := cache.NewSessionCache()
 
-	// Cargar datos maestros (gamedata) usando servicio
+	// Cargar datos maestros (gamedata)
 	gamedataFilePath := os.Getenv("GAMEDATA_FILE")
 	if gamedataFilePath == "" {
 		gamedataFilePath = "./config/gamedata.json"
 	}
 
-	gamedataSvc := service.NewGamedataService(gamedataFilePath, gamedataCache)
+	gamedataSvc := service.NewGamedataService(gamedataFilePath, dbConn)
+
+	// 1. Asegurar que BD tiene datos (importa desde JSON si está vacía)
 	if err := gamedataSvc.Load(); err != nil {
-		logger.Error().Err(err).Msg("Error al cargar datos maestros. El servidor no puede iniciar sin gamedata")
+		logger.Error().Err(err).Msg("Error al cargar datos maestros en BD")
+		os.Exit(1)
+	}
+
+	// 2. Sincronizar cache desde BD
+	if err := gamedataSvc.RefreshCache(gamedataCache); err != nil {
+		logger.Error().Err(err).Msg("Error al sincronizar cache desde BD")
 		os.Exit(1)
 	}
 

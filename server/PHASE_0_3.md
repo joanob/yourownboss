@@ -1,8 +1,36 @@
-# Fase 0.3 - Inicialización de Cache de Gamedata
+# Fase 0.3 - Inicialización de Cache de Gamedata (ACTUALIZADA)
 
 ## Descripción
 
-En esta fase se implementa el sistema de carga y caché de datos maestros (gamedata) del juego. Los datos maestros son inmutables dentro de una sesión del servidor y se cargan al inicio.
+Fase refactorizada que implementa un sistema de carga de datos maestros donde:
+1. **BD es la fuente de verdad** para datos maestros
+2. **Cache sincroniza desde BD** mediante SELECT
+3. **Endpoints admin** pueden actualizar datos sin reiniciar
+
+## Arquitectura
+
+```
+JSON
+ ↓
+[Load()]
+   Verifica BD → Importa si vacía
+   Responsabilidad: JSON → BD
+ ↓
+[RefreshCache()]
+   Carga desde BD → Actualiza cache
+   Responsabilidad: BD → Cache
+ ↓
+[Repositories BD]
+   - ResourceRepo → SELECT/INSERT recursos
+   - ProductionBuildingRepo → SELECT/INSERT edificios + procesos
+   - SaleBuildingRepo → SELECT/INSERT edificios venta
+ ↓
+[Cache: GamedataCache]
+   (thread-safe, READ-ONLY después de startup)
+ ↓
+[Handlers REST]
+   (leen del cache, rápido)
+```
 
 ## Estructura
 
@@ -11,19 +39,130 @@ server/
 ├── internal/
 │   └── gamedata/
 │       ├── repository/
-│       │   └── gamedata_repo.go    # Carga desde JSON
+│       │   ├── gamedata_repo.go              # Carga desde JSON
+│       │   ├── resource_repo.go              # SELECT/INSERT recursos
+│       │   ├── production_building_repo.go   # SELECT/INSERT edificios prod
+│       │   └── sale_building_repo.go         # SELECT/INSERT edificios venta
 │       └── service/
-│           └── gamedata_service.go  # Orquestación
+│           └── gamedata_service.go           # Orquestación
 ├── config/
-│   └── gamedata.json               # Datos maestros (ejemplo)
-└── cmd/api/main.go                 # Integración en startup
+│   └── gamedata.json                         # Datos maestros (ejemplo)
+└── cmd/api/main.go                           # Integración en startup
 ```
 
-## Componentes
+## Componentes Detallados
 
 ### 1. `internal/gamedata/repository/gamedata_repo.go`
 
-**GamedataRepository** maneja la lectura y validación del archivo JSON.
+Lee y valida JSON. Métodos:
+- `LoadFromFile()` - Lee JSON, valida estructura
+- `validate()` - Validación exhaustiva
+
+### 2. `internal/gamedata/repository/resource_repo.go` ✨ NUEVO
+
+Maneja recursos en BD.
+- `GetAll()` - SELECT recursos desde BD
+- `InsertBatch()` - INSERT múltiples en transacción
+- `Count()` - Cuenta cuántos hay en BD
+
+### 3. `internal/gamedata/repository/production_building_repo.go` ✨ NUEVO
+
+Maneja edificios de producción en BD.
+- `GetAll()` - SELECT edificios + procesos + recursos con JOINs
+- `InsertBatch()` - INSERT en transacción (edificios, procesos, recursos)
+- `Count()` - Cuenta cuántos hay en BD
+
+### 4. `internal/gamedata/repository/sale_building_repo.go` ✨ NUEVO
+
+Maneja edificios de venta en BD.
+- `GetAll()` - SELECT edificios + recursos con JOINs
+- `InsertBatch()` - INSERT en transacción
+- `Count()` - Cuenta cuántos hay en BD
+
+### 5. `internal/gamedata/service/gamedata_service.go`
+
+Orquestación de carga y cache.
+
+**Constructor:**
+```go
+NewGamedataService(filePath string, db *sql.DB)
+```
+
+**Métodos:**
+
+1. **`Load()`** - Asegura que BD tiene datos:
+   - Verifica si BD está vacía (Count)
+   - Si vacía, importa desde JSON
+   - NO sincroniza cache
+   - **Responsabilidad: JSON → BD**
+
+2. **`RefreshCache(gameCache *GamedataCache)`** - Sincroniza cache desde BD:
+   - Recibe cache como parámetro (pasada desde main.go)
+   - Carga recursos desde BD
+   - Carga edificios de producción desde BD
+   - Carga edificios de venta desde BD
+   - Actualiza cache
+   - **Responsabilidad: BD → Cache**
+
+3. **`importFromFile()`** - Importación interna desde JSON a BD
+
+## Flujo de Carga al Iniciar
+
+```
+main.go
+  ↓
+1. dbConn, _ := db.InitDatabase(dbPath)
+   (BD con schema)
+  ↓
+2. gamedataCache := cache.NewGamedataCache()
+   (Cache vacía creada)
+  ↓
+3. gamedataSvc := service.NewGamedataService(filePath, dbConn)
+   (Servicio sin cache, cache se pasa por parámetro)
+  ↓
+4. gamedataSvc.Load()
+   ├─ Verifica BD.Count()
+   ├─ Si 0: Importa JSON a BD
+   │  ├─ Carga JSON
+   │  ├─ Valida estructura
+   │  └─ InsertBatch() (3 transacciones)
+   └─ NO sincroniza cache
+  ↓
+5. gamedataSvc.RefreshCache(gamedataCache)
+   ├─ Carga desde BD (SELECT)
+   └─ Actualiza cache (pasada como parámetro)
+  ↓
+Cache listo para handlers
+```
+
+## Comportamiento
+
+### Primera ejecución:
+```
+BD vacía
+  ↓
+Load() → Importa JSON a BD
+  ↓
+RefreshCache() → Sincroniza cache desde BD
+```
+
+### Ejecuciones posteriores:
+```
+BD tiene datos
+  ↓
+Load() → Saltea importación
+  ↓
+RefreshCache() → Sincroniza cache desde BD
+```
+
+### Actualización de datos (endpoint admin futuro):
+```
+Handler admin edita BD
+  ↓
+Llama service.RefreshCache()
+  ↓
+Cache se actualiza sin reiniciar servidor
+```
 
 **Funciones principales:**
 - `NewGamedataRepository(filePath)` - Constructor
@@ -87,25 +226,29 @@ Archivo JSON que define todos los datos maestros del juego.
 
 ## Integración en main.go
 
-El servidor carga gamedata al iniciar:
+El servidor inicializa BD y gamedata en el siguiente orden:
 
 ```go
-// 1. Crear servicio
-gamedataSvc := service.NewGamedataService(gamedataFilePath, gamedataCache)
+// 1. Inicializar BD (crea schema si no existe)
+dbConn, err := db.InitDatabase(dbPath)
+if err != nil {
+    logger.Fatal().Err(err)
+}
+defer dbConn.Close()
 
-// 2. Cargar datos
+// 2. Crear servicio con BD, archivo JSON y cache
+gamedataSvc := service.NewGamedataService(gamedataFilePath, dbConn, gamedataCache)
+
+// 3. Cargar/sincronizar datos
 if err := gamedataSvc.Load(); err != nil {
-    logger.Fatal().Err(err).Msg("Error al cargar gamedata")
-    os.Exit(1)
+    logger.Fatal().Err(err)
 }
 ```
 
 **Comportamiento:**
-1. Lee ruta de `GAMEDATA_FILE` (default: `./config/gamedata.json`)
-2. Lee y parsea JSON
-3. Valida estructura completa
-4. Almacena en cache thread-safe
-5. Loguea cantidad de datos cargados
+1. `Load()` verifica BD
+2. Si vacía, importa desde JSON
+3. Luego carga datos en cache desde BD
 
 ## Variables de Entorno
 
@@ -198,68 +341,150 @@ GAMEDATA_FILE=./config/gamedata.json
 
 ## Comportamiento del Cache
 
-El cache es **read-only** después del startup:
+El cache se sincroniza desde BD al startup:
 
 ```go
-// Thread-safe read
+// Thread-safe read desde cache
 resource, exists := gamedataCache.GetResource("res-water")
+```
 
-// Para modificar gamedata, necesitarías:
-// 1. Parar el servidor
-// 2. Editar gamedata.json
-// 3. Reiniciar el servidor
+**Para actualizar datos:**
+
+Opción 1: Editar BD y llamar `RefreshCache()` (sin restart):
+```go
+// En handler admin
+if err := gamedataSvc.RefreshCache(); err != nil {
+    // error handling
+}
+```
+
+Opción 2: Importar desde JSON (BD vacía):
+```go
+// Se hace automáticamente en Load() si BD está vacía
+```
+
+Opción 3: Reiniciar servidor:
+```bash
+# Cambia gamedata.json, reinicia
+./yourownboss-api
 ```
 
 ## Logging
 
-El servicio loguea todo el proceso:
-
+### Primera ejecución (BD vacía):
 ```
-INFO Cargando datos maestros...
-INFO Gamedata cargado desde archivo resources=3 production_buildings=1 sale_buildings=1
+INFO Verificando datos maestros en BD...
+INFO BD vacía, importando datos desde JSON...
 INFO Validación de gamedata exitosa
-INFO Gamedata cargado exitosamente resources=3 production_buildings=1 sale_buildings=1
+INFO Recursos importados a BD count=5
+INFO Edificios de producción importados a BD count=2
+INFO Edificios de venta importados a BD count=2
+INFO Sincronizando cache desde BD...
+INFO Cache sincronizado exitosamente resources=5 production_buildings=2 sale_buildings=2
 ```
 
-Si hay errores:
-
+### Ejecuciones posteriores (BD con datos):
 ```
-ERROR error al cargar gamedata: gamedata no válido: recurso res-water: master_id duplicado
+INFO Verificando datos maestros en BD...
+INFO Datos maestros encontrados en BD resources_in_db=5
+INFO Sincronizando cache desde BD...
+INFO Cache sincronizado exitosamente resources=5 production_buildings=2 sale_buildings=2
+```
+
+### Si hay errores:
+```
+ERROR error al cargar datos maestros: error importando datos: error al cargar JSON: no se puede leer archivo gamedata
+ERROR Error al cargar datos maestros. El servidor no puede iniciar sin gamedata
 ```
 
 ## Para Desarrollo
 
+### Workflow típico:
+
+1. **Primera ejecución:**
+   ```bash
+   rm -f yourownboss.db  # Opcional: limpiar BD anterior
+   go run ./cmd/api
+   # → JSON se importa a BD automáticamente
+   ```
+
+2. **Ejecuciones posteriores:**
+   ```bash
+   go run ./cmd/api
+   # → Cache se sincroniza desde BD (sin reimportar JSON)
+   ```
+
+3. **Cambiar datos:**
+   - Opción A: Editar BD directamente y llamar endpoint refresh
+   - Opción B: Editar `gamedata.json`, limpiar BD y reiniciar
+   - Opción C: Llamar endpoint admin para importar nuevamente
+
 ### Validar gamedata.json
 
-El servicio valida automáticamente. Si hay errores, el servidor no inicia:
+El servicio valida automáticamente en Load(). Si hay errores:
 
 ```
-ERROR error al cargar gamedata: gamedata no válido: [detalle del error]
-ERROR Error al cargar datos maestros. El servidor no puede iniciar sin gamedata
+ERROR error al cargar datos maestros: error importando datos: gamedata no válido: [detalle]
 ```
 
-### Editar gamedata.json
+### Limpiar BD y reimportar
 
-1. Editar `config/gamedata.json`
-2. Verificar que la estructura es válida
-3. Reiniciar el servidor
+```bash
+# Windows
+del yourownboss.db yourownboss.db-shm yourownboss.db-wal
 
-El servidor revalidará automáticamente.
+# Linux/Mac
+rm -f yourownboss.db yourownboss.db-shm yourownboss.db-wal
+
+# Luego reiniciar
+go run ./cmd/api
+```
+
+### Inspeccionar BD
+
+```bash
+# Listar tablas
+sqlite3 yourownboss.db ".tables"
+
+# Ver recursos
+sqlite3 yourownboss.db "SELECT master_id, name FROM resources"
+
+# Ver edificios
+sqlite3 yourownboss.db "SELECT master_id, name FROM production_buildings"
+```
 
 ## Características Implementadas
 
-✅ Repository para cargar datos desde JSON
-✅ Validación exhaustiva de estructura y consistencia
-✅ Service para orquestación
-✅ Integración en main.go
+✅ Repository pattern para carga desde JSON
+✅ Repositories para SELECT/INSERT en BD
+✅ Validación exhaustiva de estructura JSON
+✅ Importación automática JSON → BD (primera ejecución)
+✅ Sincronización de cache desde BD
+✅ BD como fuente de verdad
+✅ Transacciones atómicas para inserciones
 ✅ Thread-safe cache
 ✅ Logging completo
-✅ Ejemplo en `config/gamedata.json`
+✅ Método RefreshCache() para resincronizar sin restart
 ✅ Soporte para ventanas horarias en procesos
+✅ Preparado para endpoints admin de actualización de datos
 
 ## Próximas Fases
 
+- **Endpoints Admin de Gamedata**
+  - POST /api/v1/admin/gamedata/import - Importar desde JSON
+  - POST /api/v1/admin/gamedata/refresh - Resincronizar cache
+  - GET /api/v1/admin/gamedata/status - Estado actual
+
 - **Fase 1**: Autenticación y Usuarios
+  - Implementar JWT
+  - Crear tablas de sesiones
+  - Handlers de auth
+
+## Documentación Relacionada
+
+- [Arquitectura Gamedata](./ARCHITECTURE_GAMEDATA.md)
+- [Cache Gamedata](../pkg/cache/gamedata.go)
+- [Especificación Completa](../../docs/YOUROWNBOSS.md)
   - Implementar JWT
   - Crear tablas de sesiones
   - Handlers de auth
