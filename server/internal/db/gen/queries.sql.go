@@ -10,6 +10,19 @@ import (
 	"time"
 )
 
+const countActiveSessionsByUserID = `-- name: CountActiveSessionsByUserID :one
+SELECT COUNT(*) as count
+FROM user_sessions
+WHERE user_id = ? AND revoked_at IS NULL AND expires_at > CURRENT_TIMESTAMP AND is_deleted = 0
+`
+
+func (q *Queries) CountActiveSessionsByUserID(ctx context.Context, userID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countActiveSessionsByUserID, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countUserByEmail = `-- name: CountUserByEmail :one
 SELECT COUNT(*) as count
 FROM users
@@ -38,6 +51,34 @@ func (q *Queries) CountUserByUsername(ctx context.Context, username string) (int
 	return count, err
 }
 
+const createSession = `-- name: CreateSession :exec
+
+INSERT INTO user_sessions (id, user_id, session_id, verification_string, token_hash, expires_at, created_at, is_deleted, deleted_at)
+VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 0, NULL)
+`
+
+type CreateSessionParams struct {
+	ID                 string    `json:"id"`
+	UserID             string    `json:"user_id"`
+	SessionID          string    `json:"session_id"`
+	VerificationString string    `json:"verification_string"`
+	TokenHash          string    `json:"token_hash"`
+	ExpiresAt          time.Time `json:"expires_at"`
+}
+
+// internal/auth/queries.sql - Operaciones CRUD para tabla user_sessions
+func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) error {
+	_, err := q.db.ExecContext(ctx, createSession,
+		arg.ID,
+		arg.UserID,
+		arg.SessionID,
+		arg.VerificationString,
+		arg.TokenHash,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
 const createUser = `-- name: CreateUser :exec
 
 INSERT INTO users (id, username, email, password_hash, role, timezone, created_at, is_deleted, deleted_at)
@@ -64,6 +105,89 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 		arg.Timezone,
 	)
 	return err
+}
+
+const deleteExpiredSessions = `-- name: DeleteExpiredSessions :exec
+UPDATE user_sessions
+SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP
+WHERE (expires_at < CURRENT_TIMESTAMP OR revoked_at IS NOT NULL) AND is_deleted = 0
+`
+
+func (q *Queries) DeleteExpiredSessions(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, deleteExpiredSessions)
+	return err
+}
+
+const getSessionByID = `-- name: GetSessionByID :one
+SELECT id, user_id, session_id, verification_string, token_hash, expires_at, revoked_at, created_at, is_deleted, deleted_at
+FROM user_sessions
+WHERE id = ? AND is_deleted = 0
+`
+
+func (q *Queries) GetSessionByID(ctx context.Context, id string) (UserSession, error) {
+	row := q.db.QueryRowContext(ctx, getSessionByID, id)
+	var i UserSession
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.SessionID,
+		&i.VerificationString,
+		&i.TokenHash,
+		&i.ExpiresAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.IsDeleted,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const getSessionBySessionID = `-- name: GetSessionBySessionID :one
+SELECT id, user_id, session_id, verification_string, token_hash, expires_at, revoked_at, created_at, is_deleted, deleted_at
+FROM user_sessions
+WHERE session_id = ? AND is_deleted = 0
+`
+
+func (q *Queries) GetSessionBySessionID(ctx context.Context, sessionID string) (UserSession, error) {
+	row := q.db.QueryRowContext(ctx, getSessionBySessionID, sessionID)
+	var i UserSession
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.SessionID,
+		&i.VerificationString,
+		&i.TokenHash,
+		&i.ExpiresAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.IsDeleted,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const getSessionByTokenHash = `-- name: GetSessionByTokenHash :one
+SELECT id, user_id, session_id, verification_string, token_hash, expires_at, revoked_at, created_at, is_deleted, deleted_at
+FROM user_sessions
+WHERE token_hash = ? AND is_deleted = 0
+`
+
+func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash string) (UserSession, error) {
+	row := q.db.QueryRowContext(ctx, getSessionByTokenHash, tokenHash)
+	var i UserSession
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.SessionID,
+		&i.VerificationString,
+		&i.TokenHash,
+		&i.ExpiresAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.IsDeleted,
+		&i.DeletedAt,
+	)
+	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
@@ -139,6 +263,57 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.DeletedAt,
 	)
 	return i, err
+}
+
+const getUserSessionsByUserID = `-- name: GetUserSessionsByUserID :many
+SELECT id, user_id, session_id, verification_string, token_hash, expires_at, revoked_at, created_at, is_deleted, deleted_at
+FROM user_sessions
+WHERE user_id = ? AND is_deleted = 0
+`
+
+func (q *Queries) GetUserSessionsByUserID(ctx context.Context, userID string) ([]UserSession, error) {
+	rows, err := q.db.QueryContext(ctx, getUserSessionsByUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UserSession
+	for rows.Next() {
+		var i UserSession
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.SessionID,
+			&i.VerificationString,
+			&i.TokenHash,
+			&i.ExpiresAt,
+			&i.RevokedAt,
+			&i.CreatedAt,
+			&i.IsDeleted,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const revokeSession = `-- name: RevokeSession :exec
+UPDATE user_sessions
+SET revoked_at = CURRENT_TIMESTAMP
+WHERE session_id = ? AND is_deleted = 0
+`
+
+func (q *Queries) RevokeSession(ctx context.Context, sessionID string) error {
+	_, err := q.db.ExecContext(ctx, revokeSession, sessionID)
+	return err
 }
 
 const softDeleteUser = `-- name: SoftDeleteUser :exec
