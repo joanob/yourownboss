@@ -127,18 +127,3 @@ func (gs *GamedataService) RefreshCache(gameCache *cache.GamedataCache) error {
 
 	return nil
 }
-
-// GetResource obtiene un recurso por master_id
-func (gs *GamedataService) GetResource(masterID string) (cache.Resource, bool) {
-	return gs.cache.GetResource(masterID)
-}
-
-// GetProductionBuilding obtiene un edificio de producción por master_id
-func (gs *GamedataService) GetProductionBuilding(masterID string) (cache.ProductionBuilding, bool) {
-	return gs.cache.GetProductionBuilding(masterID)
-}
-
-// GetSaleBuilding obtiene un edificio de venta por master_id
-func (gs *GamedataService) GetSaleBuilding(masterID string) (cache.SaleBuilding, bool) {
-	return gs.cache.GetSaleBuilding(masterID)
-}
