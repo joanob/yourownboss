@@ -4,59 +4,48 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"time"
 
+	"github.com/joanob/yourownboss/internal/auth"
 	"github.com/joanob/yourownboss/internal/db/gen"
 	"github.com/rs/zerolog/log"
 )
 
-// UserSessionRepository define la interfaz para operaciones de sesiones en la BD
-type UserSessionRepository interface {
-	CreateSession(ctx context.Context, id, userID, sessionID, verificationString, tokenHash string, expiresAt time.Time) error
-	GetByID(ctx context.Context, id string) (*gen.UserSession, error)
-	GetBySessionID(ctx context.Context, sessionID string) (*gen.UserSession, error)
-	GetByTokenHash(ctx context.Context, tokenHash string) (*gen.UserSession, error)
-	RevokeSession(ctx context.Context, sessionID string) error
-	DeleteExpiredSessions(ctx context.Context) error
-	CountActiveSessions(ctx context.Context, userID string) (int64, error)
-	GetUserSessions(ctx context.Context, userID string) ([]gen.UserSession, error)
-}
-
-// userSessionRepository implementa UserSessionRepository
+// userSessionRepository implementa auth.UserSessionRepository
 type userSessionRepository struct {
 	queries *gen.Queries
 }
 
 // NewUserSessionRepository crea un nuevo repositorio de sesiones de usuario
-func NewUserSessionRepository(queries *gen.Queries) UserSessionRepository {
+func NewUserSessionRepository(queries *gen.Queries) auth.UserSessionRepository {
 	return &userSessionRepository{
 		queries: queries,
 	}
 }
 
 // CreateSession inserta una nueva sesión en la BD
-func (r *userSessionRepository) CreateSession(ctx context.Context, id, userID, sessionID, verificationString, tokenHash string, expiresAt time.Time) error {
+func (r *userSessionRepository) CreateSession(ctx context.Context, params *gen.CreateSessionParams) (*gen.UserSession, error) {
 	logger := log.With().
-		Str("session_id", sessionID).
-		Str("user_id", userID).
+		Str("session_id", params.SessionID).
+		Str("user_id", params.UserID).
 		Logger()
 
-	err := r.queries.CreateSession(ctx, gen.CreateSessionParams{
-		ID:                 id,
-		UserID:             userID,
-		SessionID:          sessionID,
-		VerificationString: verificationString,
-		TokenHash:          tokenHash,
-		ExpiresAt:          expiresAt,
-	})
+	err := r.queries.CreateSession(ctx, *params)
 
 	if err != nil {
 		logger.Error().Err(err).Msg("Error creando sesión en BD")
-		return fmt.Errorf("error creando sesión: %w", err)
+		return nil, fmt.Errorf("error creando sesión: %w", err)
 	}
 
 	logger.Info().Msg("Sesión creada en BD")
-	return nil
+
+	// Retrieve the created session
+	session, err := r.queries.GetSessionBySessionID(ctx, params.SessionID)
+	if err != nil {
+		logger.Error().Err(err).Msg("Error obteniendo sesión recién creada")
+		return nil, fmt.Errorf("error obteniendo sesión: %w", err)
+	}
+
+	return &session, nil
 }
 
 // GetByID obtiene una sesión por su ID
@@ -144,12 +133,18 @@ func (r *userSessionRepository) CountActiveSessions(ctx context.Context, userID 
 }
 
 // GetUserSessions obtiene todas las sesiones de un usuario
-func (r *userSessionRepository) GetUserSessions(ctx context.Context, userID string) ([]gen.UserSession, error) {
+func (r *userSessionRepository) GetUserSessions(ctx context.Context, userID string) ([]*gen.UserSession, error) {
 	sessions, err := r.queries.GetUserSessionsByUserID(ctx, userID)
 	if err != nil {
 		log.Error().Err(err).Str("user_id", userID).Msg("Error obteniendo sesiones del usuario")
 		return nil, fmt.Errorf("error obteniendo sesiones: %w", err)
 	}
 
-	return sessions, nil
+	// Convert to slice of pointers
+	result := make([]*gen.UserSession, len(sessions))
+	for i := range sessions {
+		result[i] = &sessions[i]
+	}
+
+	return result, nil
 }
