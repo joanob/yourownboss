@@ -1,0 +1,177 @@
+{
+  "resources": [
+    {
+      "id": "res-1",
+      "master_id": "res-water",
+      "name": "Water",
+      "market_price": 10,
+      "market_sale_qty": 1
+    },
+    {
+      "id": "res-2",
+      "master_id": "res-tomato",
+      "name": "Tomato",
+      "market_price": 20,
+      "market_sale_qty": 1
+    },
+    {
+      "id": "res-3",
+      "master_id": "res-tomato-sauce",
+      "name": "Tomato Sauce",
+      "market_price": 50,
+      "market_sale_qty": 1
+    },
+    {
+      "id": "res-4",
+      "master_id": "res-salt",
+      "name": "Salt",
+      "market_price": 5,
+      "market_sale_qty": 1
+    },
+    {
+      "id": "res-5",
+      "master_id": "res-bottled-sauce",
+      "name": "Bottled Sauce",
+      "market_price": 100,
+      "market_sale_qty": 1
+    }
+  ],
+  "production_buildings": [
+    {
+      "id": "pb-1",
+      "master_id": "pb-cannery",
+      "name": "Cannery",
+      "construction_cost": 500,
+      "construction_time_s": 10,
+      "processes": [
+        {
+          "id": "proc-1",
+          "master_id": "proc-tomato-sauce",
+          "production_building_id": "pb-1",
+          "name": "Make Tomato Sauce",
+          "cycle_time_s": 3,
+          "window_start_hour": null,
+          "window_end_hour": null,
+          "resources": [
+            {
+              "resource_id": "res-tomato",
+              "is_output": false,
+              "quantity": 5
+            },
+            {
+              "resource_id": "res-water",
+              "is_output": false,
+              "quantity": 1
+            },
+            {
+              "resource_id": "res-tomato-sauce",
+              "is_output": true,
+              "quantity": 3
+            }
+          ]
+        },
+        {
+          "id": "proc-2",
+          "master_id": "proc-bottled-sauce",
+          "production_building_id": "pb-1",
+          "name": "Bottle Sauce",
+          "cycle_time_s": 5,
+          "window_start_hour": 28800,
+          "window_end_hour": 72000,
+          "resources": [
+            {
+              "resource_id": "res-tomato-sauce",
+              "is_output": false,
+              "quantity": 2
+            },
+            {
+              "resource_id": "res-salt",
+              "is_output": false,
+              "quantity": 1
+            },
+            {
+              "resource_id": "res-bottled-sauce",
+              "is_output": true,
+              "quantity": 2
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pb-2",
+      "master_id": "pb-farm",
+      "name": "Farm",
+      "construction_cost": 200,
+      "construction_time_s": 5,
+      "processes": [
+        {
+          "id": "proc-3",
+          "master_id": "proc-grow-tomato",
+          "production_building_id": "pb-2",
+          "name": "Grow Tomato",
+          "cycle_time_s": 10,
+          "window_start_hour": null,
+          "window_end_hour": null,
+          "resources": [
+            {
+              "resource_id": "res-water",
+              "is_output": false,
+              "quantity": 2
+            },
+            {
+              "resource_id": "res-tomato",
+              "is_output": true,
+              "quantity": 5
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "sale_buildings": [
+    {
+      "id": "sb-1",
+      "master_id": "sb-market",
+      "name": "Market Stand",
+      "construction_cost": 100,
+      "construction_time_s": 5,
+      "resources": [
+        {
+          "resource_id": "res-water",
+          "price_per_unit": 5,
+          "units_sold_per_second": 2
+        },
+        {
+          "resource_id": "res-tomato",
+          "price_per_unit": 10,
+          "units_sold_per_second": 1
+        },
+        {
+          "resource_id": "res-tomato-sauce",
+          "price_per_unit": 25,
+          "units_sold_per_second": 1
+        },
+        {
+          "resource_id": "res-bottled-sauce",
+          "price_per_unit": 50,
+          "units_sold_per_second": 1
+        }
+      ]
+    },
+    {
+      "id": "sb-2",
+      "master_id": "sb-boutique",
+      "name": "Gourmet Boutique",
+      "construction_cost": 500,
+      "construction_time_s": 20,
+      "resources": [
+        {
+          "resource_id": "res-bottled-sauce",
+          "price_per_unit": 75,
+          "units_sold_per_second": 1
+        }
+      ]
+    }
+  ]
+}
