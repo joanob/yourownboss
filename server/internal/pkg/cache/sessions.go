@@ -11,8 +11,10 @@ type SessionData struct {
 	UserID             string
 	CompanyID          *string // nullable si usuario no tiene empresa
 	VerificationString string
+	TokenHash          string // hash del refresh token
 	ExpiresAt          time.Time
 	RevokedAt          *time.Time // nil si sesión no está revocada
+	CreatedAt          time.Time
 }
 
 // SessionCache almacena sesiones de usuario con TTL
@@ -28,12 +30,17 @@ func NewSessionCache() *SessionCache {
 	}
 }
 
-// Set almacena una sesión en el cache
+// Set almacena una sesión en el cache (alias de Store para compatibilidad)
 func (sc *SessionCache) Set(sessionID string, session SessionData) {
+	sc.Store(sessionID, session)
+}
+
+// Store almacena una sesión en el cache (interfaz SessionCache del auth/service)
+func (sc *SessionCache) Store(sessionID string, data SessionData) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 
-	sc.sessions[sessionID] = session
+	sc.sessions[sessionID] = data
 }
 
 // Get obtiene una sesión por ID

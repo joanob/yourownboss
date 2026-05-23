@@ -8,13 +8,14 @@ import (
 	"time"
 
 	"github.com/joanob/yourownboss/internal/auth"
+	"github.com/joanob/yourownboss/internal/pkg/cache"
 	"github.com/rs/zerolog/log"
 )
 
 // AuthMiddleware validates session tokens and handles automatic renewal with refresh tokens.
 // It extracts the session_id and user_id from the JWT and stores them in the request context.
 // If the session token is expired, it attempts to renew it using the refresh token.
-func AuthMiddleware(jwtManager *auth.JWTManager, sessionCache *auth.SessionCache) func(http.Handler) http.Handler {
+func AuthMiddleware(jwtManager *auth.JWTManager, sessionCache *cache.SessionCache) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
@@ -59,8 +60,8 @@ func AuthMiddleware(jwtManager *auth.JWTManager, sessionCache *auth.SessionCache
 			}
 
 			// Verify session is still active in cache/DB
-			sessionData := sessionCache.Get(refreshClaims.SessionID)
-			if sessionData == nil {
+			sessionData, exists := sessionCache.Get(refreshClaims.SessionID)
+			if !exists {
 				log.Debug().Str("session_id", refreshClaims.SessionID).Msg("Session not found in cache")
 				next.ServeHTTP(w, r)
 				return

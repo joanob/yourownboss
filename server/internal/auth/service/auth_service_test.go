@@ -8,6 +8,7 @@ import (
 
 	"github.com/joanob/yourownboss/internal/auth"
 	"github.com/joanob/yourownboss/internal/db/gen"
+	"github.com/joanob/yourownboss/internal/pkg/cache"
 )
 
 // ============================================================================
@@ -245,20 +246,20 @@ func (m *mockJWTManager) ValidateRefreshToken(token string) (*auth.RefreshTokenC
 // ============================================================================
 
 type mockSessionCache struct {
-	data map[string]auth.SessionData
+	data map[string]cache.SessionData
 }
 
 func newMockSessionCache() *mockSessionCache {
 	return &mockSessionCache{
-		data: make(map[string]auth.SessionData),
+		data: make(map[string]cache.SessionData),
 	}
 }
 
-func (m *mockSessionCache) Store(sessionID string, data auth.SessionData) {
+func (m *mockSessionCache) Store(sessionID string, data cache.SessionData) {
 	m.data[sessionID] = data
 }
 
-func (m *mockSessionCache) Get(sessionID string) (auth.SessionData, bool) {
+func (m *mockSessionCache) Get(sessionID string) (cache.SessionData, bool) {
 	data, exists := m.data[sessionID]
 	return data, exists
 }

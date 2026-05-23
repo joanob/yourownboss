@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/joanob/yourownboss/internal/auth"
+	"github.com/joanob/yourownboss/internal/pkg/cache"
 )
 
 func TestAuthMiddleware_ValidSessionToken(t *testing.T) {
@@ -24,7 +25,7 @@ func TestAuthMiddleware_ValidSessionToken(t *testing.T) {
 		t.Fatalf("NewJWTManager failed: %v", err)
 	}
 
-	sessionCache := auth.NewSessionCache()
+	sessionCache := cache.NewSessionCache()
 
 	// Generate valid token
 	userID := "user-123"
@@ -69,7 +70,7 @@ func TestAuthMiddleware_NoToken_PublicEndpoint(t *testing.T) {
 		t.Fatalf("NewJWTManager failed: %v", err)
 	}
 
-	sessionCache := auth.NewSessionCache()
+	sessionCache := cache.NewSessionCache()
 
 	// Create test handler
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -95,7 +96,7 @@ func TestAuthMiddleware_InvalidToken(t *testing.T) {
 		t.Fatalf("NewJWTManager failed: %v", err)
 	}
 
-	sessionCache := auth.NewSessionCache()
+	sessionCache := cache.NewSessionCache()
 
 	// Create test handler
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -196,7 +197,7 @@ func TestAuthMiddleware_ExtractFromAuthorizationHeader(t *testing.T) {
 		t.Fatalf("NewJWTManager failed: %v", err)
 	}
 
-	sessionCache := auth.NewSessionCache()
+	sessionCache := cache.NewSessionCache()
 
 	// Generate valid token
 	token, _, err := jwtManager.GenerateSessionToken("user-123", "session-456", nil)
@@ -242,7 +243,7 @@ func TestAuthMiddleware_ExtractFromCookie(t *testing.T) {
 		t.Fatalf("NewJWTManager failed: %v", err)
 	}
 
-	sessionCache := auth.NewSessionCache()
+	sessionCache := cache.NewSessionCache()
 
 	// Generate valid token
 	token, _, err := jwtManager.GenerateSessionToken("user-123", "session-456", nil)

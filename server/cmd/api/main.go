@@ -1,23 +1,34 @@
 package main
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"strconv"
 	"time"
 
-	"encoding/json"
-
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-playground/validator/v10"
 	"github.com/joho/godotenv"
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 
+	"github.com/joanob/yourownboss/internal/auth"
+	authhttphandlers "github.com/joanob/yourownboss/internal/auth/http"
+	authrepo "github.com/joanob/yourownboss/internal/auth/repository"
+	authsvc "github.com/joanob/yourownboss/internal/auth/service"
 	"github.com/joanob/yourownboss/internal/db"
+	"github.com/joanob/yourownboss/internal/db/gen"
 	"github.com/joanob/yourownboss/internal/gamedata/service"
 	"github.com/joanob/yourownboss/internal/pkg/cache"
-	"github.com/joanob/yourownboss/internal/pkg/logger"
+	loggerutil "github.com/joanob/yourownboss/internal/pkg/logger"
+	userhttphandlers "github.com/joanob/yourownboss/internal/users/http"
+	userrepo "github.com/joanob/yourownboss/internal/users/repository"
+	usersvc "github.com/joanob/yourownboss/internal/users/service"
 )
 
 func main() {
@@ -25,8 +36,8 @@ func main() {
 	godotenv.Load()
 
 	// Inicializar logger
-	logger.InitLogger()
-	logger := logger.GetLogger()
+	loggerutil.InitLogger()
+	logger := loggerutil.GetLogger()
 
 	// Obtener configuración
 	port := os.Getenv("PORT")
@@ -34,25 +45,37 @@ func main() {
 		port = "8080"
 	}
 
-	env := os.Getenv("ENV")
-	if env == "" {
-		env = "development"
+	logLevel := os.Getenv("LOG_LEVEL")
+	if logLevel == "" {
+		logLevel = "info"
 	}
 
-	// Validar JWT_SECRET
-	jwtSecret := os.Getenv("JWT_SECRET")
-	if jwtSecret == "" {
-		logger.Error().Msg("JWT_SECRET no configurado. Usar variable de entorno JWT_SECRET")
-		os.Exit(1)
-	}
-	if len(jwtSecret) < 32 {
-		logger.Warn().Msg("JWT_SECRET tiene menos de 32 caracteres. Se recomienda usar al menos 32 caracteres")
+	// Ajustar nivel de logging
+	switch logLevel {
+	case "debug":
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	case "warn":
+		zerolog.SetGlobalLevel(zerolog.WarnLevel)
+	case "error":
+		zerolog.SetGlobalLevel(zerolog.ErrorLevel)
+	default:
+		zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	}
 
 	logger.Info().
 		Str("port", port).
-		Str("env", env).
-		Msg("Iniciando Your Own Boss Backend")
+		Str("log_level", logLevel).
+		Msg("Iniciando Your Own Boss Backend - Fase 1.11")
+
+	// Validar JWT_SECRET
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		logger.Warn().Msg("JWT_SECRET no configurado. Generando secreto aleatorio para desarrollo")
+		jwtSecret = generateRandomSecret(32)
+	}
+	if len(jwtSecret) < 32 {
+		logger.Warn().Msg("JWT_SECRET tiene menos de 32 caracteres. Se recomienda usar al menos 32 caracteres")
+	}
 
 	// Inicializar base de datos
 	dbPath := os.Getenv("DATABASE_URL")
@@ -82,17 +105,19 @@ func main() {
 
 	gamedataSvc := service.NewGamedataService(gamedataFilePath, dbConn)
 
-	// 1. Asegurar que BD tiene datos (importa desde JSON si está vacía)
+	// Asegurar que BD tiene datos (importa desde JSON si está vacía)
 	if err := gamedataSvc.Load(); err != nil {
 		logger.Error().Err(err).Msg("Error al cargar datos maestros en BD")
 		os.Exit(1)
 	}
 
-	// 2. Sincronizar cache desde BD
+	// Sincronizar cache desde BD
 	if err := gamedataSvc.RefreshCache(gamedataCache); err != nil {
 		logger.Error().Err(err).Msg("Error al sincronizar cache desde BD")
 		os.Exit(1)
 	}
+
+	logger.Info().Msg("Datos maestros cargados en cache")
 
 	// Iniciar limpiador de sesiones (cada 6 horas)
 	sessionCleanupInterval := os.Getenv("SESSION_CACHE_CLEANUP_INTERVAL")
@@ -103,7 +128,70 @@ func main() {
 	cleanupIntervalSecs, _ := strconv.ParseInt(sessionCleanupInterval, 10, 64)
 	go startSessionCleanupRoutine(sessionCache, time.Duration(cleanupIntervalSecs)*time.Second)
 
-	// Crear router
+	logger.Info().Msg("Limpiador de sesiones iniciado")
+
+	// ============================================================================
+	// INYECCIÓN DE DEPENDENCIAS - FASE 1.11
+	// ============================================================================
+
+	logger.Info().Msg("Inicializando dependencias...")
+
+	// Crear validator
+	validate := validator.New()
+
+	// Crear queries
+	queries := gen.New(dbConn)
+
+	// Crear JWT Manager
+	jwtManager, err := auth.NewJWTManager()
+	if err != nil {
+		logger.Error().Err(err).Msg("Error al crear JWT Manager")
+		os.Exit(1)
+	}
+
+	// Crear Password Manager
+	passwordManager := auth.NewPasswordManager()
+
+	// Crear Repositories
+	userRepository := userrepo.NewUserRepository(queries)
+	sessionRepository := authrepo.NewUserSessionRepository(queries)
+
+	// Crear Services
+	userService := usersvc.NewUserService(userRepository, passwordManager)
+	authService := authsvc.NewAuthService(userRepository, sessionRepository, passwordManager, jwtManager, sessionCache)
+
+	// ============================================================================
+	// CREAR ADMIN SI NO EXISTE
+	// ============================================================================
+
+	adminPassword := os.Getenv("ADMIN_PASSWORD")
+	if adminPassword == "" {
+		logger.Warn().Msg("ADMIN_PASSWORD no configurado. Admin no será creado automáticamente")
+	} else {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		// Verificar si admin ya existe
+		adminUser, _ := userRepository.GetByUsername(ctx, "admin")
+		if adminUser == nil {
+			logger.Info().Msg("Creando usuario admin...")
+			_, err := userService.Register(ctx, "admin", "admin@yourownboss.local", adminPassword, "UTC")
+			if err != nil {
+				logger.Error().Err(err).Msg("Error al crear usuario admin")
+				os.Exit(1)
+			}
+			logger.Info().Msg("Usuario admin creado exitosamente")
+		} else {
+			logger.Info().Msg("Usuario admin ya existe")
+		}
+	}
+
+	// ============================================================================
+	// CREAR ROUTER Y REGISTRAR RUTAS
+	// ============================================================================
+
+	logger.Info().Msg("Registrando rutas...")
+
 	r := chi.NewRouter()
 
 	// Middleware global
@@ -112,14 +200,17 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	// CORS middleware (basic)
+	// CORS middleware
 	r.Use(corsMiddleware())
+
+	// Timeout middleware (30 segundos)
+	r.Use(middleware.Timeout(30 * time.Second))
 
 	// Rutas de salud
 	r.Get("/api/v1/status", healthHandler)
 	r.Get("/health", healthHandler)
 
-	// Placeholder para rutas futuras
+	// Placeholder para root
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
@@ -129,13 +220,41 @@ func main() {
 		})
 	})
 
-	// Servidor HTTP
+	// Registrar rutas de autenticación
+	authhttphandlers.RegisterAuthRoutes(r, userService, authService, validate)
+	logger.Debug().Msg("Rutas de autenticación registradas")
+
+	// Registrar rutas de usuarios (requiere autenticación)
+	r.Route("/api/v1/users", func(r chi.Router) {
+		r.Use(authhttphandlers.AuthMiddleware(jwtManager, sessionCache))
+		userhttphandlers.RegisterUsersRoutes(r, userService, validate)
+	})
+	logger.Debug().Msg("Rutas de usuarios registradas")
+
+	logger.Info().Msg("Rutas registradas exitosamente")
+
+	// ============================================================================
+	// INICIAR SERVIDOR HTTP
+	// ============================================================================
+
 	addr := fmt.Sprintf(":%s", port)
-	logger.Info().Str("addr", addr).Msg("Servidor escuchando")
+	logger.Info().
+		Str("addr", addr).
+		Str("version", "0.1.0").
+		Msg("Servidor escuchando")
 
 	if err := http.ListenAndServe(addr, r); err != nil && err != http.ErrServerClosed {
 		logger.Fatal().Err(err).Msg("Error al iniciar servidor")
 	}
+}
+
+// generateRandomSecret generates a random secret of the specified length
+func generateRandomSecret(length int) string {
+	bytes := make([]byte, length)
+	if _, err := rand.Read(bytes); err != nil {
+		panic(err)
+	}
+	return base64.URLEncoding.EncodeToString(bytes)[:length]
 }
 
 // healthHandler devuelve el estado del servidor
@@ -144,15 +263,14 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"data": map[string]interface{}{
-			"status":       "ok",
-			"version":      "0.1.0",
-			"timestamp":    time.Now().UTC(),
-			"db_connected": true, // TODO: implementar verificación real de BD
+			"status":    "ok",
+			"version":   "1.11.0",
+			"timestamp": time.Now().UTC(),
 		},
 	})
 }
 
-// corsMiddleware agrega headers CORS básicos
+// corsMiddleware agrega headers CORS
 func corsMiddleware() func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -182,7 +300,7 @@ func startSessionCleanupRoutine(sc *cache.SessionCache, interval time.Duration) 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	logger := log.Logger
+	logger := loggerutil.GetLogger()
 
 	for range ticker.C {
 		deleted := sc.CleanupExpired()

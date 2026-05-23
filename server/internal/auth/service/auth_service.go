@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/joanob/yourownboss/internal/auth"
 	"github.com/joanob/yourownboss/internal/db/gen"
+	"github.com/joanob/yourownboss/internal/pkg/cache"
 	"github.com/joanob/yourownboss/internal/users/repository"
 	"github.com/rs/zerolog/log"
 )
@@ -30,8 +31,8 @@ type JWTManager interface {
 
 // SessionCache interface for dependency injection (allows mocking in tests)
 type SessionCache interface {
-	Store(sessionID string, data auth.SessionData)
-	Get(sessionID string) (auth.SessionData, bool)
+	Store(sessionID string, data cache.SessionData)
+	Get(sessionID string) (cache.SessionData, bool)
 	Revoke(sessionID string)
 }
 
@@ -138,10 +139,12 @@ func (s *authService) Login(ctx context.Context, username, password string) (*Lo
 	}
 
 	// Store session in cache
-	cacheData := auth.SessionData{
+	cacheData := cache.SessionData{
+		SessionID:          sessionID,
 		UserID:             user.ID,
 		CompanyID:          nil, // User doesn't have a company yet after registration
 		VerificationString: verificationString,
+		TokenHash:          tokenHash,
 		ExpiresAt:          expiresAt,
 		RevokedAt:          nil,
 		CreatedAt:          now,
