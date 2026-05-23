@@ -16,8 +16,8 @@ import (
 
 	"github.com/joanob/yourownboss/internal/db"
 	"github.com/joanob/yourownboss/internal/gamedata/service"
-	"github.com/joanob/yourownboss/internal/pkg"
 	"github.com/joanob/yourownboss/internal/pkg/cache"
+	"github.com/joanob/yourownboss/internal/pkg/logger"
 )
 
 func main() {
@@ -25,8 +25,8 @@ func main() {
 	godotenv.Load()
 
 	// Inicializar logger
-	pkg.InitLogger()
-	logger := pkg.GetLogger()
+	logger.InitLogger()
+	logger := logger.GetLogger()
 
 	// Obtener configuración
 	port := os.Getenv("PORT")

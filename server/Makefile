@@ -1,4 +1,4 @@
-.PHONY: help install-tools generate run test test-race build clean reset-db
+.PHONY: help install-tools generate run test test-race build clean reset-db db-verify
 
 help:
 	@echo "Available commands:"
@@ -10,6 +10,7 @@ help:
 	@echo "  make build            - Build binary for production"
 	@echo "  make clean            - Clean build artifacts"
 	@echo "  make reset-db         - Reset database (delete and recreate)"
+	@echo "  make db-verify        - Verify database integrity"
 
 install-tools:
 	@echo "Installing sqlc..."
@@ -44,7 +45,13 @@ clean:
 
 reset-db:
 	@echo "Resetting database..."
-	rm -f yourownboss.db
-	rm -f yourownboss.db-shm
-	rm -f yourownboss.db-wal
-	@echo "Database reset complete"
+	@rm -f yourownboss.db
+	@rm -f yourownboss.db-shm
+	@rm -f yourownboss.db-wal
+	@echo "✓ Database reset complete"
+	@echo "  Run 'make run' to reinitialize the database with schema.sql"
+
+db-verify:
+	@echo "Verifying database integrity..."
+	@sqlite3 yourownboss.db "SELECT COUNT(*) as table_count FROM sqlite_master WHERE type='table';" || echo "Database not found. Run 'make run' first."
+	@sqlite3 yourownboss.db ".tables"
