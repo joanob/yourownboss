@@ -127,9 +127,10 @@ CREATE TABLE IF NOT EXISTS production_runs (
   is_collected       INTEGER  NOT NULL DEFAULT 0,
   collected_at       DATETIME,
   is_deleted         INTEGER  NOT NULL DEFAULT 0,
-  deleted_at         DATETIME,
-  UNIQUE (company_building_id, is_collected) WHERE is_collected = 0
+  deleted_at         DATETIME
 );
+
+CREATE UNIQUE INDEX idx_production_runs_active ON production_runs(company_building_id) WHERE is_collected = 0;
 
 -- VENTA
 
@@ -154,9 +155,10 @@ CREATE TABLE IF NOT EXISTS sale_runs (
   is_collected              INTEGER  NOT NULL DEFAULT 0,
   collected_at              DATETIME,
   is_deleted                INTEGER  NOT NULL DEFAULT 0,
-  deleted_at                DATETIME,
-  UNIQUE (company_sale_building_id, is_collected) WHERE is_collected = 0
+  deleted_at                DATETIME
 );
+
+CREATE UNIQUE INDEX idx_sale_runs_active ON sale_runs(company_sale_building_id) WHERE is_collected = 0;
 
 -- RATE LIMITING
 
