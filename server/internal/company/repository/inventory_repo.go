@@ -34,18 +34,16 @@ func (r *InventoryRepository) GetInventory(ctx context.Context, companyID string
 	}
 
 	inventory := models.NewCompanyInventory(companyID)
-	if items != nil {
-		for _, item := range items {
-			inventoryItem := &models.CompanyInventoryItem{
-				ID:         item.ID,
-				CompanyID:  item.CompanyID,
-				ResourceID: item.ResourceID,
-				Quantity:   item.Quantity,
-				IsDeleted:  item.IsDeleted == 1,
-				DeletedAt:  item.DeletedAt,
-			}
-			inventory.AddItem(inventoryItem)
+	for _, item := range items {
+		inventoryItem := &models.CompanyInventoryItem{
+			ID:         item.ID,
+			CompanyID:  item.CompanyID,
+			ResourceID: item.ResourceID,
+			Quantity:   item.Quantity,
+			IsDeleted:  item.IsDeleted == 1,
+			DeletedAt:  item.DeletedAt,
 		}
+		inventory.AddItem(inventoryItem)
 	}
 
 	return inventory, nil

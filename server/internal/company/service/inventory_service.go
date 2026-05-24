@@ -44,7 +44,7 @@ func (s *inventoryService) GetInventory(ctx context.Context, companyID string) (
 
 	if company == nil {
 		logger.Warn().Msg("Company not found")
-		return nil, models.ErrInsufficientFunds
+		return nil, models.ErrCompanyNotFound
 	}
 
 	// Get inventory
@@ -54,7 +54,7 @@ func (s *inventoryService) GetInventory(ctx context.Context, companyID string) (
 		return nil, err
 	}
 
-	logger.Debug().Int("item_count", len(*inventory)).Msg("Inventory retrieved successfully")
+	logger.Debug().Int("item_count", len(inventory.Items)).Msg("Inventory retrieved successfully")
 	return inventory, nil
 }
 

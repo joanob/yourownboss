@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/rs/zerolog/log"
@@ -71,14 +72,14 @@ func companyToDTO(c *models.Company) CompanyDTO {
 		UserID:    c.UserID,
 		Name:      c.Name,
 		Money:     c.Money,
-		CreatedAt: c.CreatedAt,
+		CreatedAt: c.CreatedAt.Format(time.RFC3339),
 	}
 }
 
 // inventoryToDTO converts a domain CompanyInventory to API DTO
 func inventoryToDTO(inv *models.CompanyInventory) InventoryDTO {
-	items := make([]InventoryItemDTO, 0, len(*inv))
-	for _, item := range *inv {
+	items := make([]InventoryItemDTO, 0, len(inv.Items))
+	for _, item := range inv.Items {
 		items = append(items, InventoryItemDTO{
 			ID:         item.ID,
 			ResourceID: item.ResourceID,
@@ -339,7 +340,7 @@ func GetInventoryHandler(svc service.InventoryService) http.HandlerFunc {
 			return
 		}
 
-		logger.Debug().Str("company_id", companyID).Int("item_count", len(*inventory)).Msg("Inventory retrieved successfully")
+		logger.Debug().Str("company_id", companyID).Int("item_count", len(inventory.Items)).Msg("Inventory retrieved successfully")
 		writeJSON(w, http.StatusOK, inventoryToDTO(inventory))
 	}
 }
