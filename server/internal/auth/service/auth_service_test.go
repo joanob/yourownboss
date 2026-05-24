@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/joanob/yourownboss/internal/auth"
+	"github.com/joanob/yourownboss/internal/auth/models"
 	"github.com/joanob/yourownboss/internal/db/dbqueries"
 	"github.com/joanob/yourownboss/internal/pkg/cache"
 )
@@ -233,11 +233,11 @@ func (m *mockJWTManager) GenerateRefreshToken(userID, sessionID string) (string,
 	return "mock_refresh_token", "mock_verification_string", time.Now().Add(300 * 24 * time.Hour), nil
 }
 
-func (m *mockJWTManager) ValidateSessionToken(token string) (*auth.SessionTokenClaims, error) {
+func (m *mockJWTManager) ValidateSessionToken(token string) (*models.SessionTokenClaims, error) {
 	return nil, nil
 }
 
-func (m *mockJWTManager) ValidateRefreshToken(token string) (*auth.RefreshTokenClaims, error) {
+func (m *mockJWTManager) ValidateRefreshToken(token string) (*models.RefreshTokenClaims, error) {
 	return nil, nil
 }
 

@@ -5,18 +5,17 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/joanob/yourownboss/internal/auth"
 	"github.com/joanob/yourownboss/internal/db/dbqueries"
 	"github.com/rs/zerolog/log"
 )
 
-// userSessionRepository implementa auth.UserSessionRepository
+// userSessionRepository implementa UserSessionRepository
 type userSessionRepository struct {
 	queries *dbqueries.Queries
 }
 
 // NewUserSessionRepository crea un nuevo repositorio de sesiones de usuario
-func NewUserSessionRepository(queries *dbqueries.Queries) auth.UserSessionRepository {
+func NewUserSessionRepository(queries *dbqueries.Queries) UserSessionRepository {
 	return &userSessionRepository{
 		queries: queries,
 	}

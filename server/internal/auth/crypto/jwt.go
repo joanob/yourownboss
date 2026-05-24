@@ -1,4 +1,4 @@
-package auth
+package crypto
 
 import (
 	"crypto/rand"
@@ -11,6 +11,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
+
+	"github.com/joanob/yourownboss/internal/auth/models"
 )
 
 // JWTManager maneja la generación y validación de JWT
@@ -80,7 +82,7 @@ func (m *JWTManager) GenerateSessionToken(userID, sessionID string, companyID *s
 	now := time.Now()
 	expiresAt := now.Add(time.Duration(m.sessionExpiry) * time.Second)
 
-	claims := SessionTokenClaims{
+	claims := models.SessionTokenClaims{
 		UserID:    userID,
 		SessionID: sessionID,
 		CompanyID: companyID,
@@ -99,8 +101,8 @@ func (m *JWTManager) GenerateSessionToken(userID, sessionID string, companyID *s
 
 // ValidateSessionToken valida y parsea un JWT de sesión
 // NO accede a BD, solo verifica firma y expiración
-func (m *JWTManager) ValidateSessionToken(tokenString string) (*SessionTokenClaims, error) {
-	claims := &SessionTokenClaims{}
+func (m *JWTManager) ValidateSessionToken(tokenString string) (*models.SessionTokenClaims, error) {
+	claims := &models.SessionTokenClaims{}
 
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
 		// Verificar que el algoritmo es HS256
@@ -141,7 +143,7 @@ func (m *JWTManager) GenerateRefreshToken(userID, sessionID string) (string, str
 	now := time.Now()
 	expiresAt := now.Add(time.Duration(m.refreshExpiry) * time.Second)
 
-	claims := RefreshTokenClaims{
+	claims := models.RefreshTokenClaims{
 		UserID:             userID,
 		SessionID:          sessionID,
 		VerificationString: verificationString,
@@ -161,8 +163,8 @@ func (m *JWTManager) GenerateRefreshToken(userID, sessionID string) (string, str
 // ValidateRefreshToken valida y parsea un JWT de refresco
 // Solo verifica firma y expiración, NO valida contra BD
 // La validación contra BD se hace en el servicio/middleware
-func (m *JWTManager) ValidateRefreshToken(tokenString string) (*RefreshTokenClaims, error) {
-	claims := &RefreshTokenClaims{}
+func (m *JWTManager) ValidateRefreshToken(tokenString string) (*models.RefreshTokenClaims, error) {
+	claims := &models.RefreshTokenClaims{}
 
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
 		// Verificar que el algoritmo es HS256

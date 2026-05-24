@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/joanob/yourownboss/internal/auth"
+	"github.com/joanob/yourownboss/internal/auth/crypto"
 	"github.com/joanob/yourownboss/internal/pkg/cache"
 )
 
@@ -20,7 +20,7 @@ func TestAuthMiddleware_ValidSessionToken(t *testing.T) {
 		os.Unsetenv("JWT_SESSION_EXPIRY")
 	}()
 
-	jwtManager, err := auth.NewJWTManager()
+	jwtManager, err := crypto.NewJWTManager()
 	if err != nil {
 		t.Fatalf("NewJWTManager failed: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestAuthMiddleware_ValidSessionToken(t *testing.T) {
 }
 
 func TestAuthMiddleware_NoToken_PublicEndpoint(t *testing.T) {
-	jwtManager, err := auth.NewJWTManager()
+	jwtManager, err := crypto.NewJWTManager()
 	if err != nil {
 		t.Fatalf("NewJWTManager failed: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestAuthMiddleware_NoToken_PublicEndpoint(t *testing.T) {
 }
 
 func TestAuthMiddleware_InvalidToken(t *testing.T) {
-	jwtManager, err := auth.NewJWTManager()
+	jwtManager, err := crypto.NewJWTManager()
 	if err != nil {
 		t.Fatalf("NewJWTManager failed: %v", err)
 	}
@@ -192,7 +192,7 @@ func TestAuthMiddleware_ExtractFromAuthorizationHeader(t *testing.T) {
 		os.Unsetenv("JWT_SESSION_EXPIRY")
 	}()
 
-	jwtManager, err := auth.NewJWTManager()
+	jwtManager, err := crypto.NewJWTManager()
 	if err != nil {
 		t.Fatalf("NewJWTManager failed: %v", err)
 	}
@@ -238,7 +238,7 @@ func TestAuthMiddleware_ExtractFromCookie(t *testing.T) {
 		os.Unsetenv("JWT_SESSION_EXPIRY")
 	}()
 
-	jwtManager, err := auth.NewJWTManager()
+	jwtManager, err := crypto.NewJWTManager()
 	if err != nil {
 		t.Fatalf("NewJWTManager failed: %v", err)
 	}

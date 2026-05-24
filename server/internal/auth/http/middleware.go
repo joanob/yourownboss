@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/joanob/yourownboss/internal/auth"
+	"github.com/joanob/yourownboss/internal/auth/crypto"
 	"github.com/joanob/yourownboss/internal/pkg/cache"
 	"github.com/rs/zerolog/log"
 )
@@ -15,7 +15,7 @@ import (
 // AuthMiddleware validates session tokens and handles automatic renewal with refresh tokens.
 // It extracts the session_id and user_id from the JWT and stores them in the request context.
 // If the session token is expired, it attempts to renew it using the refresh token.
-func AuthMiddleware(jwtManager *auth.JWTManager, sessionCache *cache.SessionCache) func(http.Handler) http.Handler {
+func AuthMiddleware(jwtManager *crypto.JWTManager, sessionCache *cache.SessionCache) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()

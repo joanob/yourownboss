@@ -17,7 +17,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog"
 
-	"github.com/joanob/yourownboss/internal/auth"
+	authcrypto "github.com/joanob/yourownboss/internal/auth/crypto"
 	authhttphandlers "github.com/joanob/yourownboss/internal/auth/http"
 	authrepo "github.com/joanob/yourownboss/internal/auth/repository"
 	authsvc "github.com/joanob/yourownboss/internal/auth/service"
@@ -154,14 +154,14 @@ func main() {
 	queries := dbqueries.New(dbConn)
 
 	// Crear JWT Manager
-	jwtManager, err := auth.NewJWTManager()
+	jwtManager, err := authcrypto.NewJWTManager()
 	if err != nil {
 		logger.Error().Err(err).Msg("Error al crear JWT Manager")
 		os.Exit(1)
 	}
 
 	// Crear Password Manager
-	passwordManager := auth.NewPasswordManager()
+	passwordManager := authcrypto.NewPasswordManager()
 
 	// Crear Repositories
 	userRepository := userrepo.NewUserRepository(queries)

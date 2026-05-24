@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/joanob/yourownboss/internal/auth"
+	"github.com/joanob/yourownboss/internal/auth/models"
+	"github.com/joanob/yourownboss/internal/auth/repository"
 	"github.com/joanob/yourownboss/internal/db/dbqueries"
 	"github.com/joanob/yourownboss/internal/pkg/cache"
-	"github.com/joanob/yourownboss/internal/users/repository"
+	userrepo "github.com/joanob/yourownboss/internal/users/repository"
 	"github.com/rs/zerolog/log"
 )
 
@@ -25,8 +26,8 @@ type PasswordManager interface {
 type JWTManager interface {
 	GenerateSessionToken(userID, sessionID string, companyID *string) (string, time.Time, error)
 	GenerateRefreshToken(userID, sessionID string) (string, string, time.Time, error)
-	ValidateSessionToken(token string) (*auth.SessionTokenClaims, error)
-	ValidateRefreshToken(token string) (*auth.RefreshTokenClaims, error)
+	ValidateSessionToken(token string) (*models.SessionTokenClaims, error)
+	ValidateRefreshToken(token string) (*models.RefreshTokenClaims, error)
 }
 
 // SessionCache interface for dependency injection (allows mocking in tests)
@@ -69,8 +70,8 @@ type User struct {
 
 // authService implements AuthService.
 type authService struct {
-	userRepo        repository.UserRepository
-	sessionRepo     auth.UserSessionRepository
+	userRepo        userrepo.UserRepository
+	sessionRepo     repository.UserSessionRepository
 	passwordManager PasswordManager
 	jwtManager      JWTManager
 	sessionCache    SessionCache
@@ -78,8 +79,8 @@ type authService struct {
 
 // NewAuthService creates a new auth service with dependency injection.
 func NewAuthService(
-	userRepo repository.UserRepository,
-	sessionRepo auth.UserSessionRepository,
+	userRepo userrepo.UserRepository,
+	sessionRepo repository.UserSessionRepository,
 	passwordManager PasswordManager,
 	jwtManager JWTManager,
 	sessionCache SessionCache,
