@@ -31,7 +31,9 @@ import (
 	marketsvc "github.com/joanob/yourownboss/internal/market/service"
 	"github.com/joanob/yourownboss/internal/pkg/cache"
 	loggerutil "github.com/joanob/yourownboss/internal/pkg/logger"
+	productionhttphandlers "github.com/joanob/yourownboss/internal/production/http"
 	productionrepo "github.com/joanob/yourownboss/internal/production/repository"
+	productionsvc "github.com/joanob/yourownboss/internal/production/service"
 	resourcerepo "github.com/joanob/yourownboss/internal/resources/repository"
 	salerepo "github.com/joanob/yourownboss/internal/sale/repository"
 	userhttphandlers "github.com/joanob/yourownboss/internal/users/http"
@@ -162,6 +164,10 @@ func main() {
 	saleBuildingRepository := salerepo.NewSaleBuildingRepository(queries)
 	saleResourceRepository := salerepo.NewSaleResourceRepository(queries)
 
+	// Production company repositories (Phase 5)
+	companyBuildingRepository := productionrepo.NewCompanyBuildingRepository(queries)
+	productionRunRepository := productionrepo.NewProductionRunRepository(queries)
+
 	// Crear Services
 	userService := usersvc.NewUserService(userRepository, passwordManager)
 	authService := authsvc.NewAuthService(userRepository, sessionRepository, passwordManager, jwtManager, sessionCache)
@@ -170,6 +176,15 @@ func main() {
 
 	// Market service (Phase 4)
 	marketService := marketsvc.NewMarketService(companyRepository, inventoryRepository, gamedataCache)
+
+	// Production service (Phase 5)
+	productionService := productionsvc.NewProductionService(
+		companyRepository,
+		inventoryRepository,
+		companyBuildingRepository,
+		productionRunRepository,
+		gamedataCache,
+	)
 
 	// Gamedata service (Phase 3)
 	gamedataSvc := gameDataService.NewGamedataService(
@@ -262,13 +277,14 @@ func main() {
 	})
 	logger.Debug().Msg("Rutas de usuarios registradas")
 
-	// Registrar rutas de company y market (requieren autenticación)
+	// Registrar rutas de company, market y production (requieren autenticación)
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(authhttphandlers.AuthMiddleware(jwtManager, sessionCache))
 		companyhttphandlers.RegisterCompanyRoutes(r, companyService, inventoryService)
 		markethttphandlers.RegisterMarketRoutes(r, marketService)
+		productionhttphandlers.RegisterProductionRoutes(r, productionService)
 	})
-	logger.Debug().Msg("Rutas de company y market registradas")
+	logger.Debug().Msg("Rutas de company, market y production registradas")
 
 	logger.Info().Msg("Rutas registradas exitosamente")
 

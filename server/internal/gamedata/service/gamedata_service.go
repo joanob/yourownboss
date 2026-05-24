@@ -191,8 +191,65 @@ func (s *GamedataService) RefreshCache(ctx context.Context) error {
 	s.gamedataCache.SetResources(cacheResources)
 	logger.Debug().Int("count", len(resources)).Msg("Resources loaded for cache")
 
+	// Load all production buildings with their processes and resources
+	buildings, err := s.productionBuildingRepo.GetAllProductionBuildings(ctx)
+	if err != nil {
+		logger.Error().Err(err).Msg("Failed to load production buildings for cache")
+		return err
+	}
+
+	cacheBuildings := make([]cache.ProductionBuilding, 0, len(buildings))
+	for _, b := range buildings {
+		processes, err := s.productionProcessRepo.GetProcessesByBuildingID(ctx, b.ID)
+		if err != nil {
+			logger.Error().Err(err).Str("building_id", b.ID).Msg("Failed to load processes for building")
+			return err
+		}
+
+		cacheProcesses := make([]cache.ProductionProcess, 0, len(processes))
+		for _, p := range processes {
+			cacheResources := make([]cache.ProductionProcessResource, 0, len(p.InputResources)+len(p.OutputResources))
+			for _, r := range p.InputResources {
+				cacheResources = append(cacheResources, cache.ProductionProcessResource{
+					ResourceID: r.ResourceID,
+					IsOutput:   false,
+					Quantity:   r.Quantity,
+				})
+			}
+			for _, r := range p.OutputResources {
+				cacheResources = append(cacheResources, cache.ProductionProcessResource{
+					ResourceID: r.ResourceID,
+					IsOutput:   true,
+					Quantity:   r.Quantity,
+				})
+			}
+			cacheProcesses = append(cacheProcesses, cache.ProductionProcess{
+				ID:                   p.ID,
+				MasterID:             p.MasterID,
+				ProductionBuildingID: p.ProductionBuildingID,
+				Name:                 p.Name,
+				CycleTimeS:           p.CycleTimeSec,
+				WindowStartHour:      p.WindowStartHour,
+				WindowEndHour:        p.WindowEndHour,
+				Resources:            cacheResources,
+			})
+		}
+
+		cacheBuildings = append(cacheBuildings, cache.ProductionBuilding{
+			ID:                b.ID,
+			MasterID:          b.MasterID,
+			Name:              b.Name,
+			ConstructionCost:  b.ConstructionCost,
+			ConstructionTimeS: b.ConstructionTimeSec,
+			Processes:         cacheProcesses,
+		})
+	}
+	s.gamedataCache.SetProductionBuildings(cacheBuildings)
+	logger.Debug().Int("count", len(buildings)).Msg("Production buildings loaded for cache")
+
 	logger.Info().
 		Int("resources", len(resources)).
+		Int("production_buildings", len(buildings)).
 		Msg("Cache refreshed successfully")
 
 	return nil
