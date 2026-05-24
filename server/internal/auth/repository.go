@@ -3,26 +3,26 @@ package auth
 import (
 	"context"
 
-	"github.com/joanob/yourownboss/internal/db/gen"
+	"github.com/joanob/yourownboss/internal/db/dbqueries"
 )
 
 // UserSessionRepository defines the interface for session persistence operations.
 type UserSessionRepository interface {
 	// CreateSession creates a new user session.
 	// Returns the created session or error.
-	CreateSession(ctx context.Context, params *gen.CreateSessionParams) (*gen.UserSession, error)
+	CreateSession(ctx context.Context, params *dbqueries.CreateSessionParams) (*dbqueries.UserSession, error)
 
 	// GetByID retrieves a session by its ID.
 	// Returns nil if not found.
-	GetByID(ctx context.Context, id string) (*gen.UserSession, error)
+	GetByID(ctx context.Context, id string) (*dbqueries.UserSession, error)
 
 	// GetBySessionID retrieves a session by session_id (the unique session identifier).
 	// Returns nil if not found.
-	GetBySessionID(ctx context.Context, sessionID string) (*gen.UserSession, error)
+	GetBySessionID(ctx context.Context, sessionID string) (*dbqueries.UserSession, error)
 
 	// GetByTokenHash retrieves a session by token_hash.
 	// Returns nil if not found.
-	GetByTokenHash(ctx context.Context, tokenHash string) (*gen.UserSession, error)
+	GetByTokenHash(ctx context.Context, tokenHash string) (*dbqueries.UserSession, error)
 
 	// RevokeSession marks a session as revoked (sets revoked_at).
 	// Returns error if operation fails.
@@ -37,5 +37,5 @@ type UserSessionRepository interface {
 
 	// GetUserSessions retrieves all sessions for a user (not soft-deleted).
 	// Returns empty slice if none found.
-	GetUserSessions(ctx context.Context, userID string) ([]*gen.UserSession, error)
+	GetUserSessions(ctx context.Context, userID string) ([]*dbqueries.UserSession, error)
 }

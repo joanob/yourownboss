@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/joanob/yourownboss/internal/auth"
-	"github.com/joanob/yourownboss/internal/db/gen"
+	"github.com/joanob/yourownboss/internal/db/dbqueries"
 	"github.com/joanob/yourownboss/internal/pkg/cache"
 )
 
@@ -16,21 +16,21 @@ import (
 // ============================================================================
 
 type mockAuthUserRepository struct {
-	users            map[string]*gen.User
+	users            map[string]*dbqueries.User
 	getByUsernameErr error
 }
 
 func newMockAuthUserRepository() *mockAuthUserRepository {
 	return &mockAuthUserRepository{
-		users: make(map[string]*gen.User),
+		users: make(map[string]*dbqueries.User),
 	}
 }
 
-func (m *mockAuthUserRepository) CreateUser(ctx context.Context, params *gen.CreateUserParams) (*gen.User, error) {
+func (m *mockAuthUserRepository) CreateUser(ctx context.Context, params *dbqueries.CreateUserParams) (*dbqueries.User, error) {
 	return nil, nil
 }
 
-func (m *mockAuthUserRepository) GetByUsername(ctx context.Context, username string) (*gen.User, error) {
+func (m *mockAuthUserRepository) GetByUsername(ctx context.Context, username string) (*dbqueries.User, error) {
 	if m.getByUsernameErr != nil {
 		return nil, m.getByUsernameErr
 	}
@@ -44,15 +44,15 @@ func (m *mockAuthUserRepository) GetByUsername(ctx context.Context, username str
 	return nil, nil
 }
 
-func (m *mockAuthUserRepository) GetByID(ctx context.Context, userID string) (*gen.User, error) {
+func (m *mockAuthUserRepository) GetByID(ctx context.Context, userID string) (*dbqueries.User, error) {
 	return m.users[userID], nil
 }
 
-func (m *mockAuthUserRepository) GetByEmail(ctx context.Context, email string) (*gen.User, error) {
+func (m *mockAuthUserRepository) GetByEmail(ctx context.Context, email string) (*dbqueries.User, error) {
 	return nil, nil
 }
 
-func (m *mockAuthUserRepository) UpdateUser(ctx context.Context, params *gen.UpdateUserParams) (*gen.User, error) {
+func (m *mockAuthUserRepository) UpdateUser(ctx context.Context, params *dbqueries.UpdateUserParams) (*dbqueries.User, error) {
 	return nil, nil
 }
 
@@ -73,7 +73,7 @@ func (m *mockAuthUserRepository) SoftDeleteUser(ctx context.Context, userID stri
 // ============================================================================
 
 type mockUserSessionRepository struct {
-	sessions          map[string]*gen.UserSession
+	sessions          map[string]*dbqueries.UserSession
 	createSessionErr  error
 	getBySessionIDErr error
 	revokeSessionErr  error
@@ -81,16 +81,16 @@ type mockUserSessionRepository struct {
 
 func newMockUserSessionRepository() *mockUserSessionRepository {
 	return &mockUserSessionRepository{
-		sessions: make(map[string]*gen.UserSession),
+		sessions: make(map[string]*dbqueries.UserSession),
 	}
 }
 
-func (m *mockUserSessionRepository) CreateSession(ctx context.Context, params *gen.CreateSessionParams) (*gen.UserSession, error) {
+func (m *mockUserSessionRepository) CreateSession(ctx context.Context, params *dbqueries.CreateSessionParams) (*dbqueries.UserSession, error) {
 	if m.createSessionErr != nil {
 		return nil, m.createSessionErr
 	}
 
-	session := &gen.UserSession{
+	session := &dbqueries.UserSession{
 		ID:                 params.ID,
 		UserID:             params.UserID,
 		SessionID:          params.SessionID,
@@ -105,7 +105,7 @@ func (m *mockUserSessionRepository) CreateSession(ctx context.Context, params *g
 	return session, nil
 }
 
-func (m *mockUserSessionRepository) GetBySessionID(ctx context.Context, sessionID string) (*gen.UserSession, error) {
+func (m *mockUserSessionRepository) GetBySessionID(ctx context.Context, sessionID string) (*dbqueries.UserSession, error) {
 	if m.getBySessionIDErr != nil {
 		return nil, m.getBySessionIDErr
 	}
@@ -113,7 +113,7 @@ func (m *mockUserSessionRepository) GetBySessionID(ctx context.Context, sessionI
 	return m.sessions[sessionID], nil
 }
 
-func (m *mockUserSessionRepository) GetByID(ctx context.Context, sessionRecordID string) (*gen.UserSession, error) {
+func (m *mockUserSessionRepository) GetByID(ctx context.Context, sessionRecordID string) (*dbqueries.UserSession, error) {
 	for _, session := range m.sessions {
 		if session.ID == sessionRecordID {
 			return session, nil
@@ -122,7 +122,7 @@ func (m *mockUserSessionRepository) GetByID(ctx context.Context, sessionRecordID
 	return nil, nil
 }
 
-func (m *mockUserSessionRepository) GetByTokenHash(ctx context.Context, tokenHash string) (*gen.UserSession, error) {
+func (m *mockUserSessionRepository) GetByTokenHash(ctx context.Context, tokenHash string) (*dbqueries.UserSession, error) {
 	for _, session := range m.sessions {
 		if session.TokenHash == tokenHash {
 			return session, nil
@@ -131,8 +131,8 @@ func (m *mockUserSessionRepository) GetByTokenHash(ctx context.Context, tokenHas
 	return nil, nil
 }
 
-func (m *mockUserSessionRepository) GetUserSessions(ctx context.Context, userID string) ([]*gen.UserSession, error) {
-	var sessions []*gen.UserSession
+func (m *mockUserSessionRepository) GetUserSessions(ctx context.Context, userID string) ([]*dbqueries.UserSession, error) {
+	var sessions []*dbqueries.UserSession
 	for _, session := range m.sessions {
 		if session.UserID == userID {
 			sessions = append(sessions, session)
@@ -284,7 +284,7 @@ func TestAuthService_Login_Success(t *testing.T) {
 	mockJWT := newMockJWTManager()
 	mockSessionCache := newMockSessionCache()
 
-	user := &gen.User{
+	user := &dbqueries.User{
 		ID:           "user-123",
 		Username:     "alice",
 		Email:        "alice@example.com",
@@ -350,7 +350,7 @@ func TestAuthService_Login_InvalidPassword(t *testing.T) {
 	mockJWT := newMockJWTManager()
 	mockSessionCache := newMockSessionCache()
 
-	user := &gen.User{
+	user := &dbqueries.User{
 		ID:           "user-123",
 		Username:     "alice",
 		Email:        "alice@example.com",
@@ -382,7 +382,7 @@ func TestAuthService_Logout_Success(t *testing.T) {
 	mockSessionCache := newMockSessionCache()
 
 	// Create a session first
-	session := &gen.UserSession{
+	session := &dbqueries.UserSession{
 		ID:        "session-record-123",
 		UserID:    "user-123",
 		SessionID: "session-123",

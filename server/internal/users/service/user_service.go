@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/joanob/yourownboss/internal/db/gen"
+	"github.com/joanob/yourownboss/internal/db/dbqueries"
 	"github.com/joanob/yourownboss/internal/users/repository"
 	"github.com/rs/zerolog/log"
 )
@@ -112,7 +112,7 @@ func (s *userService) Register(ctx context.Context, username, email, password, t
 	userID := uuid.New().String()
 
 	timezonePtr := timezone
-	createdUser, err := s.userRepo.CreateUser(ctx, &gen.CreateUserParams{
+	createdUser, err := s.userRepo.CreateUser(ctx, &dbqueries.CreateUserParams{
 		ID:           userID,
 		Username:     username,
 		Email:        email,
@@ -187,7 +187,7 @@ func (s *userService) UpdateUser(ctx context.Context, userID string, updates *Us
 	}
 	// Prepare update parameters
 	now := time.Now().UTC()
-	updateParams := gen.UpdateUserParams{
+	updateParams := dbqueries.UpdateUserParams{
 		ID:                         userID,
 		Timezone:                   updates.Timezone,
 		LastTimezoneModificationAt: &now,
@@ -226,7 +226,7 @@ func (s *userService) DeleteUser(ctx context.Context, userID string) error {
 }
 
 // dbUserToModel converts a DBO user to a Model user.
-func dbUserToModel(dbo *gen.User) *User {
+func dbUserToModel(dbo *dbqueries.User) *User {
 	return &User{
 		ID:                         dbo.ID,
 		Username:                   dbo.Username,

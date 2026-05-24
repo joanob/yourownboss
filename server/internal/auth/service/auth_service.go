@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/joanob/yourownboss/internal/auth"
-	"github.com/joanob/yourownboss/internal/db/gen"
+	"github.com/joanob/yourownboss/internal/db/dbqueries"
 	"github.com/joanob/yourownboss/internal/pkg/cache"
 	"github.com/joanob/yourownboss/internal/users/repository"
 	"github.com/rs/zerolog/log"
@@ -123,7 +123,7 @@ func (s *authService) Login(ctx context.Context, username, password string) (*Lo
 	now := time.Now().UTC()
 	expiresAt := now.Add(300 * 24 * time.Hour) // 300 days from Fase 1.7 spec
 
-	createSessionParams := &gen.CreateSessionParams{
+	createSessionParams := &dbqueries.CreateSessionParams{
 		ID:                 uuid.New().String(),
 		UserID:             user.ID,
 		SessionID:          sessionID,
@@ -218,7 +218,7 @@ func hashVerificationString(verificationString string) string {
 }
 
 // dbUserToModel converts a DBO user to a Model user.
-func dbUserToModel(dbo *gen.User) *User {
+func dbUserToModel(dbo *dbqueries.User) *User {
 	return &User{
 		ID:                         dbo.ID,
 		Username:                   dbo.Username,

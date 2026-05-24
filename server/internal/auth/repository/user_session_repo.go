@@ -6,24 +6,24 @@ import (
 	"fmt"
 
 	"github.com/joanob/yourownboss/internal/auth"
-	"github.com/joanob/yourownboss/internal/db/gen"
+	"github.com/joanob/yourownboss/internal/db/dbqueries"
 	"github.com/rs/zerolog/log"
 )
 
 // userSessionRepository implementa auth.UserSessionRepository
 type userSessionRepository struct {
-	queries *gen.Queries
+	queries *dbqueries.Queries
 }
 
 // NewUserSessionRepository crea un nuevo repositorio de sesiones de usuario
-func NewUserSessionRepository(queries *gen.Queries) auth.UserSessionRepository {
+func NewUserSessionRepository(queries *dbqueries.Queries) auth.UserSessionRepository {
 	return &userSessionRepository{
 		queries: queries,
 	}
 }
 
 // CreateSession inserta una nueva sesión en la BD
-func (r *userSessionRepository) CreateSession(ctx context.Context, params *gen.CreateSessionParams) (*gen.UserSession, error) {
+func (r *userSessionRepository) CreateSession(ctx context.Context, params *dbqueries.CreateSessionParams) (*dbqueries.UserSession, error) {
 	logger := log.With().
 		Str("session_id", params.SessionID).
 		Str("user_id", params.UserID).
@@ -49,7 +49,7 @@ func (r *userSessionRepository) CreateSession(ctx context.Context, params *gen.C
 }
 
 // GetByID obtiene una sesión por su ID
-func (r *userSessionRepository) GetByID(ctx context.Context, id string) (*gen.UserSession, error) {
+func (r *userSessionRepository) GetByID(ctx context.Context, id string) (*dbqueries.UserSession, error) {
 	session, err := r.queries.GetSessionByID(ctx, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -64,7 +64,7 @@ func (r *userSessionRepository) GetByID(ctx context.Context, id string) (*gen.Us
 }
 
 // GetBySessionID obtiene una sesión por su session_id
-func (r *userSessionRepository) GetBySessionID(ctx context.Context, sessionID string) (*gen.UserSession, error) {
+func (r *userSessionRepository) GetBySessionID(ctx context.Context, sessionID string) (*dbqueries.UserSession, error) {
 	session, err := r.queries.GetSessionBySessionID(ctx, sessionID)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -79,7 +79,7 @@ func (r *userSessionRepository) GetBySessionID(ctx context.Context, sessionID st
 }
 
 // GetByTokenHash obtiene una sesión por su token_hash
-func (r *userSessionRepository) GetByTokenHash(ctx context.Context, tokenHash string) (*gen.UserSession, error) {
+func (r *userSessionRepository) GetByTokenHash(ctx context.Context, tokenHash string) (*dbqueries.UserSession, error) {
 	session, err := r.queries.GetSessionByTokenHash(ctx, tokenHash)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -133,7 +133,7 @@ func (r *userSessionRepository) CountActiveSessions(ctx context.Context, userID 
 }
 
 // GetUserSessions obtiene todas las sesiones de un usuario
-func (r *userSessionRepository) GetUserSessions(ctx context.Context, userID string) ([]*gen.UserSession, error) {
+func (r *userSessionRepository) GetUserSessions(ctx context.Context, userID string) ([]*dbqueries.UserSession, error) {
 	sessions, err := r.queries.GetUserSessionsByUserID(ctx, userID)
 	if err != nil {
 		log.Error().Err(err).Str("user_id", userID).Msg("Error obteniendo sesiones del usuario")
@@ -141,7 +141,7 @@ func (r *userSessionRepository) GetUserSessions(ctx context.Context, userID stri
 	}
 
 	// Convert to slice of pointers
-	result := make([]*gen.UserSession, len(sessions))
+	result := make([]*dbqueries.UserSession, len(sessions))
 	for i := range sessions {
 		result[i] = &sessions[i]
 	}

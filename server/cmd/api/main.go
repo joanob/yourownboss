@@ -22,7 +22,7 @@ import (
 	authrepo "github.com/joanob/yourownboss/internal/auth/repository"
 	authsvc "github.com/joanob/yourownboss/internal/auth/service"
 	"github.com/joanob/yourownboss/internal/db"
-	"github.com/joanob/yourownboss/internal/db/gen"
+	"github.com/joanob/yourownboss/internal/db/dbqueries"
 	"github.com/joanob/yourownboss/internal/gamedata/service"
 	"github.com/joanob/yourownboss/internal/pkg/cache"
 	loggerutil "github.com/joanob/yourownboss/internal/pkg/logger"
@@ -151,7 +151,7 @@ func main() {
 	validate := validator.New()
 
 	// Crear queries
-	queries := gen.New(dbConn)
+	queries := dbqueries.New(dbConn)
 
 	// Crear JWT Manager
 	jwtManager, err := auth.NewJWTManager()

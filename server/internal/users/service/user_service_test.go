@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/joanob/yourownboss/internal/db/gen"
+	"github.com/joanob/yourownboss/internal/db/dbqueries"
 )
 
 // ============================================================================
@@ -14,7 +14,7 @@ import (
 // ============================================================================
 
 type mockUserRepository struct {
-	users               map[string]*gen.User
+	users               map[string]*dbqueries.User
 	usernameExists      map[string]bool
 	emailExists         map[string]bool
 	createUserErr       error
@@ -29,18 +29,18 @@ type mockUserRepository struct {
 
 func newMockUserRepository() *mockUserRepository {
 	return &mockUserRepository{
-		users:          make(map[string]*gen.User),
+		users:          make(map[string]*dbqueries.User),
 		usernameExists: make(map[string]bool),
 		emailExists:    make(map[string]bool),
 	}
 }
 
-func (m *mockUserRepository) CreateUser(ctx context.Context, params *gen.CreateUserParams) (*gen.User, error) {
+func (m *mockUserRepository) CreateUser(ctx context.Context, params *dbqueries.CreateUserParams) (*dbqueries.User, error) {
 	if m.createUserErr != nil {
 		return nil, m.createUserErr
 	}
 
-	user := &gen.User{
+	user := &dbqueries.User{
 		ID:           params.ID,
 		Username:     params.Username,
 		Email:        params.Email,
@@ -57,7 +57,7 @@ func (m *mockUserRepository) CreateUser(ctx context.Context, params *gen.CreateU
 	return user, nil
 }
 
-func (m *mockUserRepository) GetByID(ctx context.Context, id string) (*gen.User, error) {
+func (m *mockUserRepository) GetByID(ctx context.Context, id string) (*dbqueries.User, error) {
 	if m.getByIDErr != nil {
 		return nil, m.getByIDErr
 	}
@@ -65,7 +65,7 @@ func (m *mockUserRepository) GetByID(ctx context.Context, id string) (*gen.User,
 	return m.users[id], nil
 }
 
-func (m *mockUserRepository) GetByUsername(ctx context.Context, username string) (*gen.User, error) {
+func (m *mockUserRepository) GetByUsername(ctx context.Context, username string) (*dbqueries.User, error) {
 	if m.getByUsernameErr != nil {
 		return nil, m.getByUsernameErr
 	}
@@ -79,7 +79,7 @@ func (m *mockUserRepository) GetByUsername(ctx context.Context, username string)
 	return nil, nil
 }
 
-func (m *mockUserRepository) GetByEmail(ctx context.Context, email string) (*gen.User, error) {
+func (m *mockUserRepository) GetByEmail(ctx context.Context, email string) (*dbqueries.User, error) {
 	if m.getByEmailErr != nil {
 		return nil, m.getByEmailErr
 	}
@@ -93,7 +93,7 @@ func (m *mockUserRepository) GetByEmail(ctx context.Context, email string) (*gen
 	return nil, nil
 }
 
-func (m *mockUserRepository) UpdateUser(ctx context.Context, params *gen.UpdateUserParams) (*gen.User, error) {
+func (m *mockUserRepository) UpdateUser(ctx context.Context, params *dbqueries.UpdateUserParams) (*dbqueries.User, error) {
 	if m.updateUserErr != nil {
 		return nil, m.updateUserErr
 	}
@@ -275,7 +275,7 @@ func TestUserService_Register_PasswordHashError(t *testing.T) {
 func TestUserService_GetUser_Found(t *testing.T) {
 	// Setup
 	mockRepo := newMockUserRepository()
-	user := &gen.User{
+	user := &dbqueries.User{
 		ID:       "user-123",
 		Username: "alice",
 		Email:    "alice@example.com",
@@ -339,7 +339,7 @@ func TestUserService_UpdateUser_Success(t *testing.T) {
 	// Setup
 	mockRepo := newMockUserRepository()
 	newTimezone := "America/NewYork"
-	user := &gen.User{
+	user := &dbqueries.User{
 		ID:       "user-123",
 		Username: "alice",
 		Email:    "alice@example.com",
@@ -373,7 +373,7 @@ func TestUserService_UpdateUser_TimezoneRestriction(t *testing.T) {
 	mockRepo := newMockUserRepository()
 	newTimezone := "America/NewYork"
 	lastMod := time.Now().Add(-10 * time.Hour) // Only 10 hours ago
-	user := &gen.User{
+	user := &dbqueries.User{
 		ID:                         "user-123",
 		Username:                   "alice",
 		Email:                      "alice@example.com",
@@ -424,7 +424,7 @@ func TestUserService_UpdateUser_UserNotFound(t *testing.T) {
 func TestUserService_DeleteUser_Success(t *testing.T) {
 	// Setup
 	mockRepo := newMockUserRepository()
-	user := &gen.User{
+	user := &dbqueries.User{
 		ID:       "user-123",
 		Username: "alice",
 		Email:    "alice@example.com",
