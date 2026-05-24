@@ -53,7 +53,7 @@ type MockInventoryRepository struct {
 	GetInventoryItemFunc        func(ctx context.Context, companyID, resourceID string) (*models.CompanyInventoryItem, error)
 	AddToInventoryFunc          func(ctx context.Context, companyID, resourceID string, quantity int64) (*models.CompanyInventoryItem, error)
 	RemoveFromInventoryFunc     func(ctx context.Context, companyID, resourceID string, quantity int64) (*models.CompanyInventoryItem, error)
-	UpdateInventoryQuantityFunc func(ctx context.Context, companyID, resourceID string, quantity int64) (*models.CompanyInventoryItem, error)
+	UpdateInventoryQuantityFunc func(ctx context.Context, itemID string, newQuantity int64) (*models.CompanyInventoryItem, error)
 	UpsertInventoryItemFunc     func(ctx context.Context, companyID, resourceID string, quantity int64) (*models.CompanyInventoryItem, error)
 }
 
@@ -73,8 +73,8 @@ func (m *MockInventoryRepository) RemoveFromInventory(ctx context.Context, compa
 	return m.RemoveFromInventoryFunc(ctx, companyID, resourceID, quantity)
 }
 
-func (m *MockInventoryRepository) UpdateInventoryQuantity(ctx context.Context, companyID, resourceID string, quantity int64) (*models.CompanyInventoryItem, error) {
-	return m.UpdateInventoryQuantityFunc(ctx, companyID, resourceID, quantity)
+func (m *MockInventoryRepository) UpdateInventoryQuantity(ctx context.Context, itemID string, newQuantity int64) (*models.CompanyInventoryItem, error) {
+	return m.UpdateInventoryQuantityFunc(ctx, itemID, newQuantity)
 }
 
 func (m *MockInventoryRepository) UpsertInventoryItem(ctx context.Context, companyID, resourceID string, quantity int64) (*models.CompanyInventoryItem, error) {

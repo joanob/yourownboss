@@ -26,9 +26,12 @@ import (
 	companysvc "github.com/joanob/yourownboss/internal/company/service"
 	"github.com/joanob/yourownboss/internal/db"
 	"github.com/joanob/yourownboss/internal/db/dbqueries"
-	"github.com/joanob/yourownboss/internal/gamedata/service"
+	gameDataService "github.com/joanob/yourownboss/internal/gamedata/service"
 	"github.com/joanob/yourownboss/internal/pkg/cache"
 	loggerutil "github.com/joanob/yourownboss/internal/pkg/logger"
+	productionrepo "github.com/joanob/yourownboss/internal/production/repository"
+	resourcerepo "github.com/joanob/yourownboss/internal/resources/repository"
+	salerepo "github.com/joanob/yourownboss/internal/sale/repository"
 	userhttphandlers "github.com/joanob/yourownboss/internal/users/http"
 	userrepo "github.com/joanob/yourownboss/internal/users/repository"
 	usersvc "github.com/joanob/yourownboss/internal/users/service"
@@ -111,28 +114,6 @@ func main() {
 	gamedataCache := cache.NewGamedataCache()
 	sessionCache := cache.NewSessionCache()
 
-	// Cargar datos maestros (gamedata)
-	gamedataFilePath := os.Getenv("GAMEDATA_FILE")
-	if gamedataFilePath == "" {
-		gamedataFilePath = "./config/gamedata.json"
-	}
-
-	gamedataSvc := service.NewGamedataService(gamedataFilePath, dbConn)
-
-	// Asegurar que BD tiene datos (importa desde JSON si está vacía)
-	if err := gamedataSvc.Load(); err != nil {
-		logger.Error().Err(err).Msg("Error al cargar datos maestros en BD")
-		os.Exit(1)
-	}
-
-	// Sincronizar cache desde BD
-	if err := gamedataSvc.RefreshCache(gamedataCache); err != nil {
-		logger.Error().Err(err).Msg("Error al sincronizar cache desde BD")
-		os.Exit(1)
-	}
-
-	logger.Info().Msg("Datos maestros cargados en cache")
-
 	// Iniciar limpiador de sesiones (cada 6 horas)
 	sessionCleanupInterval := os.Getenv("SESSION_CACHE_CLEANUP_INTERVAL")
 	if sessionCleanupInterval == "" {
@@ -172,11 +153,38 @@ func main() {
 	companyRepository := companyrepo.NewCompanyRepository(queries)
 	inventoryRepository := companyrepo.NewInventoryRepository(queries)
 
+	// Gamedata repositories (Phase 3)
+	resourceRepository := resourcerepo.NewResourceRepository(queries)
+	productionBuildingRepository := productionrepo.NewProductionBuildingRepository(queries)
+	productionProcessRepository := productionrepo.NewProductionProcessRepository(queries)
+	saleBuildingRepository := salerepo.NewSaleBuildingRepository(queries)
+	saleResourceRepository := salerepo.NewSaleResourceRepository(queries)
+
 	// Crear Services
 	userService := usersvc.NewUserService(userRepository, passwordManager)
 	authService := authsvc.NewAuthService(userRepository, sessionRepository, passwordManager, jwtManager, sessionCache)
 	companyService := companysvc.NewCompanyService(companyRepository, inventoryRepository)
 	inventoryService := companysvc.NewInventoryService(inventoryRepository, companyRepository)
+
+	// Gamedata service (Phase 3)
+	gamedataSvc := gameDataService.NewGamedataService(
+		resourceRepository,
+		productionBuildingRepository,
+		productionProcessRepository,
+		saleBuildingRepository,
+		saleResourceRepository,
+		gamedataCache,
+	)
+
+	// Load and cache gamedata
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := gamedataSvc.RefreshCache(ctx); err != nil {
+		logger.Error().Err(err).Msg("Error al cargar datos maestros en cache")
+		os.Exit(1)
+	}
+	logger.Info().Msg("Datos maestros cargados en cache")
 
 	// ============================================================================
 	// CREAR ADMIN SI NO EXISTE

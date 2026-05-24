@@ -1,5 +1,7 @@
 package models
 
+import "github.com/joanob/yourownboss/internal/db/dbqueries"
+
 // ResourceDBO represents a resource as stored in the database
 type ResourceDBO struct {
 	ID            string `db:"id"`
@@ -40,5 +42,19 @@ func (r *Resource) ToResourceDBO() *ResourceDBO {
 		Name:          r.Name,
 		MarketPrice:   r.MarketPrice,
 		MarketSaleQty: r.MarketSaleQty,
+	}
+}
+
+// FromDBQueriesResource converts a sqlc-generated Resource to a model DBO
+func FromDBQueriesResource(dbo *dbqueries.Resource) *ResourceDBO {
+	if dbo == nil {
+		return nil
+	}
+	return &ResourceDBO{
+		ID:            dbo.ID,
+		MasterID:      dbo.MasterID,
+		Name:          dbo.Name,
+		MarketPrice:   dbo.MarketPrice,
+		MarketSaleQty: dbo.MarketSaleQty,
 	}
 }

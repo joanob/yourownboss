@@ -11,6 +11,16 @@ import (
 	"github.com/joanob/yourownboss/internal/db/dbqueries"
 )
 
+// InventoryRepositoryInterface defines the interface for inventory repository operations
+type InventoryRepositoryInterface interface {
+	GetInventory(ctx context.Context, companyID string) (*models.CompanyInventory, error)
+	GetInventoryItem(ctx context.Context, companyID, resourceID string) (*models.CompanyInventoryItem, error)
+	AddToInventory(ctx context.Context, companyID, resourceID string, quantity int64) (*models.CompanyInventoryItem, error)
+	RemoveFromInventory(ctx context.Context, companyID, resourceID string, quantity int64) (*models.CompanyInventoryItem, error)
+	UpdateInventoryQuantity(ctx context.Context, itemID string, newQuantity int64) (*models.CompanyInventoryItem, error)
+	UpsertInventoryItem(ctx context.Context, companyID, resourceID string, quantity int64) (*models.CompanyInventoryItem, error)
+}
+
 // InventoryRepository handles all inventory-related database operations
 type InventoryRepository struct {
 	queries *dbqueries.Queries

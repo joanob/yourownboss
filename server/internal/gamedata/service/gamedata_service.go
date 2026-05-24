@@ -1,129 +1,261 @@
 package service
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/joanob/yourownboss/internal/gamedata/repository"
 	"github.com/joanob/yourownboss/internal/pkg/cache"
+	"github.com/joanob/yourownboss/internal/production/models"
+	"github.com/joanob/yourownboss/internal/production/repository"
+	resourceModels "github.com/joanob/yourownboss/internal/resources/models"
+	resourceRepo "github.com/joanob/yourownboss/internal/resources/repository"
+	saleModels "github.com/joanob/yourownboss/internal/sale/models"
+	saleRepo "github.com/joanob/yourownboss/internal/sale/repository"
 )
 
-// GamedataService maneja la carga de datos maestros desde BD.
-// La cache se sincroniza desde fuera mediante RefreshCache()
+// GamedataService handles gamedata operations
 type GamedataService struct {
-	db                     *sql.DB
-	fileRepo               *repository.GamedataRepository
-	resourceRepo           *repository.ResourceRepo
-	productionBuildingRepo *repository.ProductionBuildingRepo
-	saleBuildingRepo       *repository.SaleBuildingRepo
+	resourceRepo           *resourceRepo.ResourceRepository
+	productionBuildingRepo *repository.ProductionBuildingRepository
+	productionProcessRepo  *repository.ProductionProcessRepository
+	saleBuildingRepo       *saleRepo.SaleBuildingRepository
+	saleResourceRepo       *saleRepo.SaleResourceRepository
+	gamedataCache          *cache.GamedataCache
 }
 
-// NewGamedataService crea una nueva instancia del servicio
-// Requiere: filePath (para importar de JSON), db (conexión a BD)
-func NewGamedataService(filePath string, db *sql.DB) *GamedataService {
+// NewGamedataService creates a new gamedata service
+func NewGamedataService(
+	resourceRepo *resourceRepo.ResourceRepository,
+	productionBuildingRepo *repository.ProductionBuildingRepository,
+	productionProcessRepo *repository.ProductionProcessRepository,
+	saleBuildingRepo *saleRepo.SaleBuildingRepository,
+	saleResourceRepo *saleRepo.SaleResourceRepository,
+	gamedataCache *cache.GamedataCache,
+) *GamedataService {
 	return &GamedataService{
-		db:                     db,
-		fileRepo:               repository.NewGamedataRepository(filePath),
-		resourceRepo:           repository.NewResourceRepo(db),
-		productionBuildingRepo: repository.NewProductionBuildingRepo(db),
-		saleBuildingRepo:       repository.NewSaleBuildingRepo(db),
+		resourceRepo:           resourceRepo,
+		productionBuildingRepo: productionBuildingRepo,
+		productionProcessRepo:  productionProcessRepo,
+		saleBuildingRepo:       saleBuildingRepo,
+		saleResourceRepo:       saleResourceRepo,
+		gamedataCache:          gamedataCache,
 	}
 }
 
-// Load asegura que la BD tiene datos maestros.
-// Si BD está vacía, importa desde JSON.
-// NO sincroniza el cache (ver RefreshCache()).
-func (gs *GamedataService) Load() error {
+// GetGameData returns all gamedata from cache
+func (s *GamedataService) GetGameData(ctx context.Context) (*GamedataResponse, error) {
 	logger := log.Logger
 
-	logger.Info().Msg("Verificando datos maestros en BD...")
-
-	// Contar datos en BD
-	resourceCount, err := gs.resourceRepo.Count()
-	if err != nil {
-		return fmt.Errorf("error contando recursos en BD: %w", err)
+	// Get all cached resources
+	cachedResources := s.gamedataCache.GetAllResources()
+	resources := make([]*resourceModels.Resource, 0, len(cachedResources))
+	for _, cr := range cachedResources {
+		resources = append(resources, &resourceModels.Resource{
+			ID:            cr.ID,
+			MasterID:      cr.MasterID,
+			Name:          cr.Name,
+			MarketPrice:   cr.MarketPrice,
+			MarketSaleQty: cr.MarketSaleQty,
+		})
 	}
 
-	// Si BD está vacía, importar desde JSON
-	if resourceCount == 0 {
-		logger.Info().Msg("BD vacía, importando datos desde JSON...")
-		if err := gs.importFromFile(); err != nil {
-			return fmt.Errorf("error importando datos: %w", err)
+	logger.Debug().
+		Int("resources", len(resources)).
+		Msg("Gamedata retrieved from cache")
+
+	return &GamedataResponse{
+		Resources:           resources,
+		ProductionBuildings: []*models.ProductionBuilding{},
+		SaleBuildings:       []*saleModels.SaleBuilding{},
+	}, nil
+}
+
+// ImportGameData imports gamedata from a request and updates both database and cache
+func (s *GamedataService) ImportGameData(ctx context.Context, data *GamedataImportRequest) error {
+	logger := log.Logger.With().Int("resources_count", len(data.Resources)).
+		Int("production_buildings_count", len(data.ProductionBuildings)).
+		Int("sale_buildings_count", len(data.SaleBuildings)).Logger()
+
+	logger.Info().Msg("Starting gamedata import")
+
+	// Validate input
+	if err := s.validateGamedataImport(data); err != nil {
+		logger.Error().Err(err).Msg("Gamedata validation failed")
+		return err
+	}
+
+	// Import resources
+	for _, res := range data.Resources {
+		if _, err := s.resourceRepo.UpsertResource(ctx, res); err != nil {
+			logger.Error().Err(err).Str("resource_id", res.ID).Msg("Failed to import resource")
+			return err
 		}
-	} else {
-		logger.Info().Int("resources_in_db", resourceCount).Msg("Datos maestros encontrados en BD")
+	}
+	logger.Debug().Int("count", len(data.Resources)).Msg("Resources imported")
+
+	// Import production buildings and their processes
+	for _, building := range data.ProductionBuildings {
+		if _, err := s.productionBuildingRepo.UpsertProductionBuilding(ctx, building); err != nil {
+			logger.Error().Err(err).Str("building_id", building.ID).Msg("Failed to import production building")
+			return err
+		}
+
+		// Import processes for this building
+		for _, process := range building.Processes {
+			if _, err := s.productionProcessRepo.UpsertProductionProcess(ctx, process); err != nil {
+				logger.Error().Err(err).Str("process_id", process.ID).Msg("Failed to import production process")
+				return err
+			}
+
+			// Delete existing resources for this process
+			if err := s.productionProcessRepo.DeleteProcessResources(ctx, process.ID); err != nil {
+				logger.Error().Err(err).Str("process_id", process.ID).Msg("Failed to delete existing process resources")
+				return err
+			}
+
+			// Import input resources
+			for _, input := range process.InputResources {
+				if err := s.productionProcessRepo.CreateProcessResource(ctx, process.ID, input.ResourceID, 0, input.Quantity); err != nil {
+					logger.Error().Err(err).Str("process_id", process.ID).Str("resource_id", input.ResourceID).Msg("Failed to import process input resource")
+					return err
+				}
+			}
+
+			// Import output resources
+			for _, output := range process.OutputResources {
+				if err := s.productionProcessRepo.CreateProcessResource(ctx, process.ID, output.ResourceID, 1, output.Quantity); err != nil {
+					logger.Error().Err(err).Str("process_id", process.ID).Str("resource_id", output.ResourceID).Msg("Failed to import process output resource")
+					return err
+				}
+			}
+		}
+	}
+	logger.Debug().Int("count", len(data.ProductionBuildings)).Msg("Production buildings imported")
+
+	// Import sale buildings and their resources
+	for _, building := range data.SaleBuildings {
+		if _, err := s.saleBuildingRepo.UpsertSaleBuilding(ctx, building); err != nil {
+			logger.Error().Err(err).Str("building_id", building.ID).Msg("Failed to import sale building")
+			return err
+		}
+
+		// Delete existing resources for this sale building
+		if err := s.saleResourceRepo.DeleteSaleResources(ctx, building.ID); err != nil {
+			logger.Error().Err(err).Str("building_id", building.ID).Msg("Failed to delete existing sale building resources")
+			return err
+		}
+
+		// Import resources for this building
+		for _, resource := range building.Resources {
+			if err := s.saleResourceRepo.CreateSaleResource(ctx, building.ID, resource.ResourceID, resource.PricePerUnit, resource.UnitsSoldPerSecond); err != nil {
+				logger.Error().Err(err).Str("building_id", building.ID).Str("resource_id", resource.ResourceID).Msg("Failed to import sale building resource")
+				return err
+			}
+		}
+	}
+	logger.Debug().Int("count", len(data.SaleBuildings)).Msg("Sale buildings imported")
+
+	// Refresh cache with newly imported data
+	if err := s.RefreshCache(ctx); err != nil {
+		logger.Error().Err(err).Msg("Failed to refresh cache after import")
+		return err
 	}
 
-	logger.Info().Msg("Verificación de datos maestros completada")
+	logger.Info().Msg("Gamedata import completed successfully")
 	return nil
 }
 
-// importFromFile carga datos desde JSON e importa a BD
-func (gs *GamedataService) importFromFile() error {
+// RefreshCache reloads all gamedata from database into cache
+func (s *GamedataService) RefreshCache(ctx context.Context) error {
 	logger := log.Logger
 
-	// Cargar desde JSON
-	gamedata, err := gs.fileRepo.LoadFromFile()
+	// Load all resources
+	resources, err := s.resourceRepo.GetAllResources(ctx)
 	if err != nil {
-		return fmt.Errorf("error cargando JSON: %w", err)
+		logger.Error().Err(err).Msg("Failed to load resources for cache")
+		return err
 	}
 
-	// Insertar en BD (en transacciones independientes)
-	if err := gs.resourceRepo.InsertBatch(gamedata.Resources); err != nil {
-		return fmt.Errorf("error insertando recursos: %w", err)
+	cacheResources := make([]cache.Resource, 0, len(resources))
+	for _, r := range resources {
+		cacheResources = append(cacheResources, cache.Resource{
+			ID:            r.ID,
+			MasterID:      r.MasterID,
+			Name:          r.Name,
+			MarketPrice:   r.MarketPrice,
+			MarketSaleQty: r.MarketSaleQty,
+		})
 	}
-	logger.Info().Int("count", len(gamedata.Resources)).Msg("Recursos importados a BD")
-
-	if err := gs.productionBuildingRepo.InsertBatch(gamedata.ProductionBuildings); err != nil {
-		return fmt.Errorf("error insertando edificios de producción: %w", err)
-	}
-	logger.Info().Int("count", len(gamedata.ProductionBuildings)).Msg("Edificios de producción importados a BD")
-
-	if err := gs.saleBuildingRepo.InsertBatch(gamedata.SaleBuildings); err != nil {
-		return fmt.Errorf("error insertando edificios de venta: %w", err)
-	}
-	logger.Info().Int("count", len(gamedata.SaleBuildings)).Msg("Edificios de venta importados a BD")
-
-	return nil
-}
-
-// RefreshCache sincroniza el cache desde los datos en BD
-// Requiere la cache como parámetro para actualizarla
-func (gs *GamedataService) RefreshCache(gameCache *cache.GamedataCache) error {
-	logger := log.Logger
-
-	logger.Info().Msg("Sincronizando cache desde BD...")
-
-	// Cargar recursos desde BD
-	resources, err := gs.resourceRepo.GetAll()
-	if err != nil {
-		return fmt.Errorf("error cargando recursos: %w", err)
-	}
-
-	// Cargar edificios de producción desde BD
-	productionBuildings, err := gs.productionBuildingRepo.GetAll()
-	if err != nil {
-		return fmt.Errorf("error cargando edificios de producción: %w", err)
-	}
-
-	// Cargar edificios de venta desde BD
-	saleBuildings, err := gs.saleBuildingRepo.GetAll()
-	if err != nil {
-		return fmt.Errorf("error cargando edificios de venta: %w", err)
-	}
-
-	// Actualizar cache
-	gameCache.SetResources(resources)
-	gameCache.SetProductionBuildings(productionBuildings)
-	gameCache.SetSaleBuildings(saleBuildings)
+	s.gamedataCache.SetResources(cacheResources)
+	logger.Debug().Int("count", len(resources)).Msg("Resources loaded for cache")
 
 	logger.Info().
 		Int("resources", len(resources)).
-		Int("production_buildings", len(productionBuildings)).
-		Int("sale_buildings", len(saleBuildings)).
-		Msg("Cache sincronizado exitosamente desde BD")
+		Msg("Cache refreshed successfully")
 
 	return nil
+}
+
+// validateGamedataImport validates the gamedata import request
+func (s *GamedataService) validateGamedataImport(data *GamedataImportRequest) error {
+	if data == nil {
+		return fmt.Errorf("gamedata import request is nil")
+	}
+
+	// Check for duplicate resource master_ids
+	resourceMasterIDs := make(map[string]bool)
+	for _, res := range data.Resources {
+		if resourceMasterIDs[res.MasterID] {
+			return fmt.Errorf("duplicate resource master_id: %s", res.MasterID)
+		}
+		resourceMasterIDs[res.MasterID] = true
+
+		if res.ID == "" || res.MasterID == "" || res.Name == "" {
+			return fmt.Errorf("invalid resource: missing required fields")
+		}
+	}
+
+	// Check for duplicate production building master_ids
+	buildingMasterIDs := make(map[string]bool)
+	for _, building := range data.ProductionBuildings {
+		if buildingMasterIDs[building.MasterID] {
+			return fmt.Errorf("duplicate production building master_id: %s", building.MasterID)
+		}
+		buildingMasterIDs[building.MasterID] = true
+
+		if building.ID == "" || building.MasterID == "" || building.Name == "" {
+			return fmt.Errorf("invalid production building: missing required fields")
+		}
+	}
+
+	// Check for duplicate sale building master_ids
+	saleBuildingMasterIDs := make(map[string]bool)
+	for _, building := range data.SaleBuildings {
+		if saleBuildingMasterIDs[building.MasterID] {
+			return fmt.Errorf("duplicate sale building master_id: %s", building.MasterID)
+		}
+		saleBuildingMasterIDs[building.MasterID] = true
+
+		if building.ID == "" || building.MasterID == "" || building.Name == "" {
+			return fmt.Errorf("invalid sale building: missing required fields")
+		}
+	}
+
+	return nil
+}
+
+// GamedataResponse represents the response for gamedata endpoints
+type GamedataResponse struct {
+	Resources           []*resourceModels.Resource   `json:"resources"`
+	ProductionBuildings []*models.ProductionBuilding `json:"production_buildings"`
+	SaleBuildings       []*saleModels.SaleBuilding   `json:"sale_buildings"`
+}
+
+// GamedataImportRequest represents the request body for importing gamedata
+type GamedataImportRequest struct {
+	Resources           []*resourceModels.Resource   `json:"resources"`
+	ProductionBuildings []*models.ProductionBuilding `json:"production_buildings"`
+	SaleBuildings       []*saleModels.SaleBuilding   `json:"sale_buildings"`
 }

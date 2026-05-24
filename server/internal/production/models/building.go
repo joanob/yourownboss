@@ -1,5 +1,7 @@
 package models
 
+import "github.com/joanob/yourownboss/internal/db/dbqueries"
+
 // ProductionBuildingDBO represents a production building as stored in the database
 type ProductionBuildingDBO struct {
 	ID                  string `db:"id"`
@@ -42,6 +44,20 @@ func (pb *ProductionBuilding) ToProductionBuildingDBO() *ProductionBuildingDBO {
 		Name:                pb.Name,
 		ConstructionCost:    pb.ConstructionCost,
 		ConstructionTimeSec: pb.ConstructionTimeSec,
+	}
+}
+
+// FromDBQueriesProductionBuilding converts a sqlc-generated ProductionBuilding to a model DBO
+func FromDBQueriesProductionBuilding(dbo *dbqueries.ProductionBuilding) *ProductionBuildingDBO {
+	if dbo == nil {
+		return nil
+	}
+	return &ProductionBuildingDBO{
+		ID:                  dbo.ID,
+		MasterID:            dbo.MasterID,
+		Name:                dbo.Name,
+		ConstructionCost:    dbo.ConstructionCost,
+		ConstructionTimeSec: dbo.ConstructionTimeS,
 	}
 }
 

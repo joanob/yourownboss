@@ -32,7 +32,7 @@ func (r *ProductionProcessRepository) CreateProductionProcess(ctx context.Contex
 		MasterID:             dbo.MasterID,
 		ProductionBuildingID: dbo.ProductionBuildingID,
 		Name:                 dbo.Name,
-		CycleTimeSec:         dbo.CycleTimeSec,
+		CycleTimeS:           dbo.CycleTimeSec,
 		WindowStartHour:      dbo.WindowStartHour,
 		WindowEndHour:        dbo.WindowEndHour,
 	})
@@ -61,7 +61,8 @@ func (r *ProductionProcessRepository) GetProcessByID(ctx context.Context, proces
 		return nil, nil
 	}
 
-	process := models.NewProductionProcess(&dbo)
+	dboDbo := models.FromDBQueriesProductionProcess(&dbo)
+	process := models.NewProductionProcess(dboDbo)
 
 	// Load process resources (input and output)
 	resources, err := r.queries.GetProductionProcessResources(ctx, processID)
@@ -71,7 +72,7 @@ func (r *ProductionProcessRepository) GetProcessByID(ctx context.Context, proces
 	}
 
 	for _, res := range resources {
-		if res.IsOutput == 1 {
+		if res.IsOutput {
 			process.AddOutputResource(res.ResourceID, res.Quantity)
 		} else {
 			process.AddInputResource(res.ResourceID, res.Quantity)
@@ -97,7 +98,8 @@ func (r *ProductionProcessRepository) GetProcessByMasterID(ctx context.Context, 
 		return nil, nil
 	}
 
-	process := models.NewProductionProcess(&dbo)
+	dboDbo := models.FromDBQueriesProductionProcess(&dbo)
+	process := models.NewProductionProcess(dboDbo)
 
 	// Load process resources
 	resources, err := r.queries.GetProductionProcessResources(ctx, dbo.ID)
@@ -107,7 +109,7 @@ func (r *ProductionProcessRepository) GetProcessByMasterID(ctx context.Context, 
 	}
 
 	for _, res := range resources {
-		if res.IsOutput == 1 {
+		if res.IsOutput {
 			process.AddOutputResource(res.ResourceID, res.Quantity)
 		} else {
 			process.AddInputResource(res.ResourceID, res.Quantity)
@@ -130,7 +132,8 @@ func (r *ProductionProcessRepository) GetProcessesByBuildingID(ctx context.Conte
 
 	processes := make([]*models.ProductionProcess, 0, len(dbos))
 	for _, dbo := range dbos {
-		process := models.NewProductionProcess(&dbo)
+		dboDbo := models.FromDBQueriesProductionProcess(&dbo)
+		process := models.NewProductionProcess(dboDbo)
 
 		// Load resources for each process
 		resources, err := r.queries.GetProductionProcessResources(ctx, dbo.ID)
@@ -140,7 +143,7 @@ func (r *ProductionProcessRepository) GetProcessesByBuildingID(ctx context.Conte
 		}
 
 		for _, res := range resources {
-			if res.IsOutput == 1 {
+			if res.IsOutput {
 				process.AddOutputResource(res.ResourceID, res.Quantity)
 			} else {
 				process.AddInputResource(res.ResourceID, res.Quantity)
@@ -164,7 +167,7 @@ func (r *ProductionProcessRepository) UpsertProductionProcess(ctx context.Contex
 		MasterID:             dbo.MasterID,
 		ProductionBuildingID: dbo.ProductionBuildingID,
 		Name:                 dbo.Name,
-		CycleTimeSec:         dbo.CycleTimeSec,
+		CycleTimeS:           dbo.CycleTimeSec,
 		WindowStartHour:      dbo.WindowStartHour,
 		WindowEndHour:        dbo.WindowEndHour,
 	})
@@ -189,7 +192,7 @@ func (r *ProductionProcessRepository) CreateProcessResource(ctx context.Context,
 	err := r.queries.CreateProductionProcessResource(ctx, dbqueries.CreateProductionProcessResourceParams{
 		ProcessID:  processID,
 		ResourceID: resourceID,
-		IsOutput:   isOutput,
+		IsOutput:   isOutput == 1,
 		Quantity:   quantity,
 	})
 

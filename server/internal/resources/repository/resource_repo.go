@@ -59,8 +59,9 @@ func (r *ResourceRepository) GetResourceByID(ctx context.Context, resourceID str
 		return nil, nil
 	}
 
+	dboDbo := models.FromDBQueriesResource(&dbo)
 	logger.Debug().Msg("Resource retrieved successfully")
-	return models.NewResource(&dbo), nil
+	return models.NewResource(dboDbo), nil
 }
 
 // GetResourceByMasterID retrieves a resource by its master ID
@@ -78,8 +79,9 @@ func (r *ResourceRepository) GetResourceByMasterID(ctx context.Context, masterID
 		return nil, nil
 	}
 
+	dboDbo := models.FromDBQueriesResource(&dbo)
 	logger.Debug().Msg("Resource retrieved successfully")
-	return models.NewResource(&dbo), nil
+	return models.NewResource(dboDbo), nil
 }
 
 // GetAllResources retrieves all resources
@@ -94,7 +96,8 @@ func (r *ResourceRepository) GetAllResources(ctx context.Context) ([]*models.Res
 
 	resources := make([]*models.Resource, 0, len(dbos))
 	for _, dbo := range dbos {
-		resources = append(resources, models.NewResource(&dbo))
+		dboDbo := models.FromDBQueriesResource(&dbo)
+		resources = append(resources, models.NewResource(dboDbo))
 	}
 
 	logger.Debug().Int("count", len(resources)).Msg("All resources retrieved successfully")

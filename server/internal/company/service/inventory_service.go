@@ -19,12 +19,12 @@ type InventoryService interface {
 
 // inventoryService implements InventoryService
 type inventoryService struct {
-	inventoryRepo *repository.InventoryRepository
-	companyRepo   *repository.CompanyRepository
+	inventoryRepo repository.InventoryRepositoryInterface
+	companyRepo   repository.CompanyRepositoryInterface
 }
 
 // NewInventoryService creates a new inventory service
-func NewInventoryService(inventoryRepo *repository.InventoryRepository, companyRepo *repository.CompanyRepository) InventoryService {
+func NewInventoryService(inventoryRepo repository.InventoryRepositoryInterface, companyRepo repository.CompanyRepositoryInterface) InventoryService {
 	return &inventoryService{
 		inventoryRepo: inventoryRepo,
 		companyRepo:   companyRepo,

@@ -28,11 +28,11 @@ func (r *ProductionBuildingRepository) CreateProductionBuilding(ctx context.Cont
 
 	dbo := building.ToProductionBuildingDBO()
 	err := r.queries.CreateProductionBuilding(ctx, dbqueries.CreateProductionBuildingParams{
-		ID:                  dbo.ID,
-		MasterID:            dbo.MasterID,
-		Name:                dbo.Name,
-		ConstructionCost:    dbo.ConstructionCost,
-		ConstructionTimeSec: dbo.ConstructionTimeSec,
+		ID:                dbo.ID,
+		MasterID:          dbo.MasterID,
+		Name:              dbo.Name,
+		ConstructionCost:  dbo.ConstructionCost,
+		ConstructionTimeS: dbo.ConstructionTimeSec,
 	})
 
 	if err != nil {
@@ -59,8 +59,9 @@ func (r *ProductionBuildingRepository) GetProductionBuildingByID(ctx context.Con
 		return nil, nil
 	}
 
+	dboDbo := models.FromDBQueriesProductionBuilding(&dbo)
 	logger.Debug().Msg("Production building retrieved successfully")
-	return models.NewProductionBuilding(&dbo), nil
+	return models.NewProductionBuilding(dboDbo), nil
 }
 
 // GetProductionBuildingByMasterID retrieves a production building by its master ID
@@ -78,8 +79,9 @@ func (r *ProductionBuildingRepository) GetProductionBuildingByMasterID(ctx conte
 		return nil, nil
 	}
 
+	dboDbo := models.FromDBQueriesProductionBuilding(&dbo)
 	logger.Debug().Msg("Production building retrieved successfully")
-	return models.NewProductionBuilding(&dbo), nil
+	return models.NewProductionBuilding(dboDbo), nil
 }
 
 // GetAllProductionBuildings retrieves all production buildings
@@ -94,7 +96,8 @@ func (r *ProductionBuildingRepository) GetAllProductionBuildings(ctx context.Con
 
 	buildings := make([]*models.ProductionBuilding, 0, len(dbos))
 	for _, dbo := range dbos {
-		buildings = append(buildings, models.NewProductionBuilding(&dbo))
+		dboDbo := models.FromDBQueriesProductionBuilding(&dbo)
+		buildings = append(buildings, models.NewProductionBuilding(dboDbo))
 	}
 
 	logger.Debug().Int("count", len(buildings)).Msg("All production buildings retrieved successfully")
@@ -107,11 +110,11 @@ func (r *ProductionBuildingRepository) UpsertProductionBuilding(ctx context.Cont
 
 	dbo := building.ToProductionBuildingDBO()
 	err := r.queries.UpsertProductionBuilding(ctx, dbqueries.UpsertProductionBuildingParams{
-		ID:                  dbo.ID,
-		MasterID:            dbo.MasterID,
-		Name:                dbo.Name,
-		ConstructionCost:    dbo.ConstructionCost,
-		ConstructionTimeSec: dbo.ConstructionTimeSec,
+		ID:                dbo.ID,
+		MasterID:          dbo.MasterID,
+		Name:              dbo.Name,
+		ConstructionCost:  dbo.ConstructionCost,
+		ConstructionTimeS: dbo.ConstructionTimeSec,
 	})
 
 	if err != nil {

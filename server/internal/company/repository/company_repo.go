@@ -10,6 +10,17 @@ import (
 	"github.com/joanob/yourownboss/internal/db/dbqueries"
 )
 
+// CompanyRepositoryInterface defines the interface for company repository operations
+type CompanyRepositoryInterface interface {
+	CreateCompany(ctx context.Context, userID, name string, initialMoney int64) (*models.Company, error)
+	GetCompanyByID(ctx context.Context, companyID string) (*models.Company, error)
+	GetCompanyByUserID(ctx context.Context, userID string) (*models.Company, error)
+	UpdateCompanyName(ctx context.Context, companyID, newName string) (*models.Company, error)
+	UpdateCompanyMoney(ctx context.Context, companyID string, newMoney int64) (*models.Company, error)
+	CheckCompanyExists(ctx context.Context, companyID string) (bool, error)
+	SoftDeleteCompany(ctx context.Context, companyID string) error
+}
+
 // CompanyRepository handles all company-related database operations
 type CompanyRepository struct {
 	queries *dbqueries.Queries

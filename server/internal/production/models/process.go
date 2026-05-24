@@ -1,5 +1,7 @@
 package models
 
+import "github.com/joanob/yourownboss/internal/db/dbqueries"
+
 // ProductionProcessDBO represents a production process as stored in the database
 type ProductionProcessDBO struct {
 	ID                   string `db:"id"`
@@ -72,6 +74,22 @@ func (pp *ProductionProcess) ToProductionProcessDBO() *ProductionProcessDBO {
 		CycleTimeSec:         pp.CycleTimeSec,
 		WindowStartHour:      pp.WindowStartHour,
 		WindowEndHour:        pp.WindowEndHour,
+	}
+}
+
+// FromDBQueriesProductionProcess converts a sqlc-generated ProductionProcess to a model DBO
+func FromDBQueriesProductionProcess(dbo *dbqueries.ProductionProcess) *ProductionProcessDBO {
+	if dbo == nil {
+		return nil
+	}
+	return &ProductionProcessDBO{
+		ID:                   dbo.ID,
+		MasterID:             dbo.MasterID,
+		ProductionBuildingID: dbo.ProductionBuildingID,
+		Name:                 dbo.Name,
+		CycleTimeSec:         dbo.CycleTimeS,
+		WindowStartHour:      dbo.WindowStartHour,
+		WindowEndHour:        dbo.WindowEndHour,
 	}
 }
 

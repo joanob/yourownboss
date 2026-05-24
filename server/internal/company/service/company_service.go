@@ -19,12 +19,12 @@ type CompanyService interface {
 
 // companyService implements CompanyService
 type companyService struct {
-	companyRepo   *repository.CompanyRepository
-	inventoryRepo *repository.InventoryRepository
+	companyRepo   repository.CompanyRepositoryInterface
+	inventoryRepo repository.InventoryRepositoryInterface
 }
 
 // NewCompanyService creates a new company service
-func NewCompanyService(companyRepo *repository.CompanyRepository, inventoryRepo *repository.InventoryRepository) CompanyService {
+func NewCompanyService(companyRepo repository.CompanyRepositoryInterface, inventoryRepo repository.InventoryRepositoryInterface) CompanyService {
 	return &companyService{
 		companyRepo:   companyRepo,
 		inventoryRepo: inventoryRepo,
