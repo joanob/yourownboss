@@ -27,6 +27,8 @@ import (
 	"github.com/joanob/yourownboss/internal/db"
 	"github.com/joanob/yourownboss/internal/db/dbqueries"
 	gameDataService "github.com/joanob/yourownboss/internal/gamedata/service"
+	markethttphandlers "github.com/joanob/yourownboss/internal/market/http"
+	marketsvc "github.com/joanob/yourownboss/internal/market/service"
 	"github.com/joanob/yourownboss/internal/pkg/cache"
 	loggerutil "github.com/joanob/yourownboss/internal/pkg/logger"
 	productionrepo "github.com/joanob/yourownboss/internal/production/repository"
@@ -166,6 +168,9 @@ func main() {
 	companyService := companysvc.NewCompanyService(companyRepository, inventoryRepository)
 	inventoryService := companysvc.NewInventoryService(inventoryRepository, companyRepository)
 
+	// Market service (Phase 4)
+	marketService := marketsvc.NewMarketService(companyRepository, inventoryRepository, gamedataCache)
+
 	// Gamedata service (Phase 3)
 	gamedataSvc := gameDataService.NewGamedataService(
 		resourceRepository,
@@ -257,12 +262,13 @@ func main() {
 	})
 	logger.Debug().Msg("Rutas de usuarios registradas")
 
-	// Registrar rutas de company (requiere autenticación)
+	// Registrar rutas de company y market (requieren autenticación)
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(authhttphandlers.AuthMiddleware(jwtManager, sessionCache))
 		companyhttphandlers.RegisterCompanyRoutes(r, companyService, inventoryService)
+		markethttphandlers.RegisterMarketRoutes(r, marketService)
 	})
-	logger.Debug().Msg("Rutas de company registradas")
+	logger.Debug().Msg("Rutas de company y market registradas")
 
 	logger.Info().Msg("Rutas registradas exitosamente")
 
