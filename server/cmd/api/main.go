@@ -21,6 +21,9 @@ import (
 	authhttphandlers "github.com/joanob/yourownboss/internal/auth/http"
 	authrepo "github.com/joanob/yourownboss/internal/auth/repository"
 	authsvc "github.com/joanob/yourownboss/internal/auth/service"
+	companyhttphandlers "github.com/joanob/yourownboss/internal/company/http"
+	companyrepo "github.com/joanob/yourownboss/internal/company/repository"
+	companysvc "github.com/joanob/yourownboss/internal/company/service"
 	"github.com/joanob/yourownboss/internal/db"
 	"github.com/joanob/yourownboss/internal/db/dbqueries"
 	"github.com/joanob/yourownboss/internal/gamedata/service"
@@ -166,10 +169,14 @@ func main() {
 	// Crear Repositories
 	userRepository := userrepo.NewUserRepository(queries)
 	sessionRepository := authrepo.NewUserSessionRepository(queries)
+	companyRepository := companyrepo.NewCompanyRepository(queries)
+	inventoryRepository := companyrepo.NewInventoryRepository(queries)
 
 	// Crear Services
 	userService := usersvc.NewUserService(userRepository, passwordManager)
 	authService := authsvc.NewAuthService(userRepository, sessionRepository, passwordManager, jwtManager, sessionCache)
+	companyService := companysvc.NewCompanyService(companyRepository, inventoryRepository)
+	inventoryService := companysvc.NewInventoryService(inventoryRepository, companyRepository)
 
 	// ============================================================================
 	// CREAR ADMIN SI NO EXISTE
@@ -241,6 +248,13 @@ func main() {
 		userhttphandlers.RegisterUsersRoutes(r, userService, validate)
 	})
 	logger.Debug().Msg("Rutas de usuarios registradas")
+
+	// Registrar rutas de company (requiere autenticación)
+	r.Route("/api/v1", func(r chi.Router) {
+		r.Use(authhttphandlers.AuthMiddleware(jwtManager, sessionCache))
+		companyhttphandlers.RegisterCompanyRoutes(r, companyService, inventoryService)
+	})
+	logger.Debug().Msg("Rutas de company registradas")
 
 	logger.Info().Msg("Rutas registradas exitosamente")
 
