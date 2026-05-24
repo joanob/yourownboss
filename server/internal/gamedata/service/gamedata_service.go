@@ -247,9 +247,39 @@ func (s *GamedataService) RefreshCache(ctx context.Context) error {
 	s.gamedataCache.SetProductionBuildings(cacheBuildings)
 	logger.Debug().Int("count", len(buildings)).Msg("Production buildings loaded for cache")
 
+	// Load all sale buildings with their resources
+	saleBuildings, err := s.saleBuildingRepo.GetAllSaleBuildings(ctx)
+	if err != nil {
+		logger.Error().Err(err).Msg("Failed to load sale buildings for cache")
+		return err
+	}
+
+	cacheSaleBuildings := make([]cache.SaleBuilding, 0, len(saleBuildings))
+	for _, sb := range saleBuildings {
+		cacheSaleResources := make([]cache.SaleResource, 0, len(sb.Resources))
+		for _, r := range sb.Resources {
+			cacheSaleResources = append(cacheSaleResources, cache.SaleResource{
+				ResourceID:         r.ResourceID,
+				PricePerUnit:       r.PricePerUnit,
+				UnitsSoldPerSecond: r.UnitsSoldPerSecond,
+			})
+		}
+		cacheSaleBuildings = append(cacheSaleBuildings, cache.SaleBuilding{
+			ID:                sb.ID,
+			MasterID:          sb.MasterID,
+			Name:              sb.Name,
+			ConstructionCost:  sb.ConstructionCost,
+			ConstructionTimeS: sb.ConstructionTimeSec,
+			Resources:         cacheSaleResources,
+		})
+	}
+	s.gamedataCache.SetSaleBuildings(cacheSaleBuildings)
+	logger.Debug().Int("count", len(saleBuildings)).Msg("Sale buildings loaded for cache")
+
 	logger.Info().
 		Int("resources", len(resources)).
 		Int("production_buildings", len(buildings)).
+		Int("sale_buildings", len(saleBuildings)).
 		Msg("Cache refreshed successfully")
 
 	return nil

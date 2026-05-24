@@ -35,7 +35,9 @@ import (
 	productionrepo "github.com/joanob/yourownboss/internal/production/repository"
 	productionsvc "github.com/joanob/yourownboss/internal/production/service"
 	resourcerepo "github.com/joanob/yourownboss/internal/resources/repository"
+	salehttphandlers "github.com/joanob/yourownboss/internal/sale/http"
 	salerepo "github.com/joanob/yourownboss/internal/sale/repository"
+	salesvc "github.com/joanob/yourownboss/internal/sale/service"
 	userhttphandlers "github.com/joanob/yourownboss/internal/users/http"
 	userrepo "github.com/joanob/yourownboss/internal/users/repository"
 	usersvc "github.com/joanob/yourownboss/internal/users/service"
@@ -168,6 +170,10 @@ func main() {
 	companyBuildingRepository := productionrepo.NewCompanyBuildingRepository(queries)
 	productionRunRepository := productionrepo.NewProductionRunRepository(queries)
 
+	// Sale company repositories (Phase 6)
+	companySaleBuildingRepository := salerepo.NewCompanySaleBuildingRepository(queries)
+	saleRunRepository := salerepo.NewSaleRunRepository(queries)
+
 	// Crear Services
 	userService := usersvc.NewUserService(userRepository, passwordManager)
 	authService := authsvc.NewAuthService(userRepository, sessionRepository, passwordManager, jwtManager, sessionCache)
@@ -183,6 +189,15 @@ func main() {
 		inventoryRepository,
 		companyBuildingRepository,
 		productionRunRepository,
+		gamedataCache,
+	)
+
+	// Sale service (Phase 6)
+	saleService := salesvc.NewSaleService(
+		companyRepository,
+		inventoryRepository,
+		companySaleBuildingRepository,
+		saleRunRepository,
 		gamedataCache,
 	)
 
@@ -283,8 +298,9 @@ func main() {
 		companyhttphandlers.RegisterCompanyRoutes(r, companyService, inventoryService)
 		markethttphandlers.RegisterMarketRoutes(r, marketService)
 		productionhttphandlers.RegisterProductionRoutes(r, productionService)
+		salehttphandlers.RegisterSaleRoutes(r, saleService)
 	})
-	logger.Debug().Msg("Rutas de company, market y production registradas")
+	logger.Debug().Msg("Rutas de company, market, production y sale registradas")
 
 	logger.Info().Msg("Rutas registradas exitosamente")
 

@@ -200,6 +200,19 @@ func (gc *GamedataCache) GetProductionProcessByID(processID string) (ProductionP
 	return ProductionProcess{}, false
 }
 
+// GetSaleBuildingByDBID obtiene un edificio de venta por su ID de base de datos
+func (gc *GamedataCache) GetSaleBuildingByDBID(dbID string) (SaleBuilding, bool) {
+	gc.mu.RLock()
+	defer gc.mu.RUnlock()
+
+	for _, b := range gc.saleBuildings {
+		if b.ID == dbID {
+			return b, true
+		}
+	}
+	return SaleBuilding{}, false
+}
+
 // IsLoaded devuelve true si el cache tiene datos cargados
 func (gc *GamedataCache) IsLoaded() bool {
 	gc.mu.RLock()
