@@ -50,6 +50,11 @@ func main() {
 		logLevel = "info"
 	}
 
+	appVersion := os.Getenv("APP_VERSION")
+	if appVersion == "" {
+		appVersion = "0.1.0"
+	}
+
 	// Ajustar nivel de logging
 	switch logLevel {
 	case "debug":
@@ -65,6 +70,7 @@ func main() {
 	logger.Info().
 		Str("port", port).
 		Str("log_level", logLevel).
+		Str("version", appVersion).
 		Msg("Iniciando Your Own Boss Backend - Fase 1.11")
 
 	// Validar JWT_SECRET
@@ -77,10 +83,15 @@ func main() {
 		logger.Warn().Msg("JWT_SECRET tiene menos de 32 caracteres. Se recomienda usar al menos 32 caracteres")
 	}
 
+	initialCompanyMoney := os.Getenv("INITIAL_COMPANY_MONEY")
+	if initialCompanyMoney == "" {
+		initialCompanyMoney = "1000"
+	}
+
 	// Inicializar base de datos
 	dbPath := os.Getenv("DATABASE_URL")
 	if dbPath == "" {
-		dbPath = "./yourownboss.db"
+		dbPath = "./data/game.db"
 	}
 
 	logger.Info().Str("path", dbPath).Msg("Inicializando base de datos...")
@@ -240,7 +251,7 @@ func main() {
 	addr := fmt.Sprintf(":%s", port)
 	logger.Info().
 		Str("addr", addr).
-		Str("version", "0.1.0").
+		Str("version", appVersion).
 		Msg("Servidor escuchando")
 
 	if err := http.ListenAndServe(addr, r); err != nil && err != http.ErrServerClosed {
@@ -259,12 +270,17 @@ func generateRandomSecret(length int) string {
 
 // healthHandler devuelve el estado del servidor
 func healthHandler(w http.ResponseWriter, r *http.Request) {
+	appVersion := os.Getenv("APP_VERSION")
+	if appVersion == "" {
+		appVersion = "0.1.0"
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"data": map[string]interface{}{
 			"status":    "ok",
-			"version":   "1.11.0",
+			"version":   appVersion,
 			"timestamp": time.Now().UTC(),
 		},
 	})
