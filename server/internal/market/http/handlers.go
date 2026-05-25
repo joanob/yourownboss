@@ -9,7 +9,10 @@ import (
 
 	companyModels "github.com/joanob/yourownboss/internal/company/models"
 	"github.com/joanob/yourownboss/internal/market/service"
+	"github.com/joanob/yourownboss/internal/pkg/cache"
 )
+
+const marketRateLimit = 20
 
 // HTTPResponse wraps all HTTP responses
 type HTTPResponse struct {
@@ -36,14 +39,27 @@ type MarketResponse struct {
 }
 
 // BuyResourceHandler handles POST /api/v1/market/buy
-func BuyResourceHandler(marketService *service.MarketService) http.HandlerFunc {
+func BuyResourceHandler(marketService *service.MarketService, rateLimiter *cache.RateLimiter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		logger := log.With().Str("handler", "BuyResource").Logger()
+
+		userID, ok := r.Context().Value("user_id").(string)
+		if !ok || userID == "" {
+			logger.Warn().Msg("No user_id in context")
+			respondWithError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+			return
+		}
 
 		companyID, ok := r.Context().Value("company_id").(string)
 		if !ok || companyID == "" {
 			logger.Warn().Msg("No company_id in context")
 			respondWithError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+			return
+		}
+
+		if !rateLimiter.Allow(userID, "market_buy", marketRateLimit) {
+			logger.Warn().Str("user_id", userID).Msg("Rate limit exceeded for market buy")
+			respondWithError(w, http.StatusTooManyRequests, "RATE_LIMIT_EXCEEDED", "Too many requests, please slow down")
 			return
 		}
 
@@ -69,6 +85,8 @@ func BuyResourceHandler(marketService *service.MarketService) http.HandlerFunc {
 			return
 		}
 
+		rateLimiter.Record(userID, "market_buy")
+
 		respondWithData(w, http.StatusOK, MarketResponse{
 			Company:   result.Company.ToDTO(),
 			Inventory: result.Inventory.ToDTO(),
@@ -77,14 +95,27 @@ func BuyResourceHandler(marketService *service.MarketService) http.HandlerFunc {
 }
 
 // SellResourceHandler handles POST /api/v1/market/sell
-func SellResourceHandler(marketService *service.MarketService) http.HandlerFunc {
+func SellResourceHandler(marketService *service.MarketService, rateLimiter *cache.RateLimiter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		logger := log.With().Str("handler", "SellResource").Logger()
+
+		userID, ok := r.Context().Value("user_id").(string)
+		if !ok || userID == "" {
+			logger.Warn().Msg("No user_id in context")
+			respondWithError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+			return
+		}
 
 		companyID, ok := r.Context().Value("company_id").(string)
 		if !ok || companyID == "" {
 			logger.Warn().Msg("No company_id in context")
 			respondWithError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+			return
+		}
+
+		if !rateLimiter.Allow(userID, "market_sell", marketRateLimit) {
+			logger.Warn().Str("user_id", userID).Msg("Rate limit exceeded for market sell")
+			respondWithError(w, http.StatusTooManyRequests, "RATE_LIMIT_EXCEEDED", "Too many requests, please slow down")
 			return
 		}
 
@@ -109,6 +140,8 @@ func SellResourceHandler(marketService *service.MarketService) http.HandlerFunc 
 			handleMarketError(w, err)
 			return
 		}
+
+		rateLimiter.Record(userID, "market_sell")
 
 		respondWithData(w, http.StatusOK, MarketResponse{
 			Company:   result.Company.ToDTO(),

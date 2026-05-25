@@ -108,6 +108,20 @@ func (sc *SessionCache) CleanupExpired() int {
 	return deleted
 }
 
+// ClearCompanyID sets company_id to nil for all active sessions of a given user.
+// Called when a user's company is deleted so that renewed tokens reflect the change.
+func (sc *SessionCache) ClearCompanyID(userID string) {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+
+	for sessionID, session := range sc.sessions {
+		if session.UserID == userID && session.RevokedAt == nil {
+			session.CompanyID = nil
+			sc.sessions[sessionID] = session
+		}
+	}
+}
+
 // Count devuelve el número de sesiones en el cache
 func (sc *SessionCache) Count() int {
 	sc.mu.RLock()

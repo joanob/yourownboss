@@ -273,6 +273,35 @@ func (m *mockSessionCache) Revoke(sessionID string) {
 }
 
 // ============================================================================
+// Mock LoginAttemptRepository
+// ============================================================================
+
+type mockLoginAttemptRepository struct {
+	failCount int64
+	countErr  error
+	recordErr error
+}
+
+func newMockLoginAttemptRepository() *mockLoginAttemptRepository {
+	return &mockLoginAttemptRepository{}
+}
+
+func (m *mockLoginAttemptRepository) CountRecentFailed(_ context.Context, _ string, _ time.Time) (int64, error) {
+	if m.countErr != nil {
+		return 0, m.countErr
+	}
+	return m.failCount, nil
+}
+
+func (m *mockLoginAttemptRepository) RecordFailure(_ context.Context, _, _ string) error {
+	if m.recordErr != nil {
+		return m.recordErr
+	}
+	m.failCount++
+	return nil
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 
@@ -283,6 +312,7 @@ func TestAuthService_Login_Success(t *testing.T) {
 	mockPM := newMockAuthPasswordManager()
 	mockJWT := newMockJWTManager()
 	mockSessionCache := newMockSessionCache()
+	mockLoginAttempts := newMockLoginAttemptRepository()
 
 	user := &dbqueries.User{
 		ID:           "user-123",
@@ -293,7 +323,7 @@ func TestAuthService_Login_Success(t *testing.T) {
 	}
 	mockUserRepo.users["user-123"] = user
 
-	service := NewAuthService(mockUserRepo, mockSessionRepo, mockPM, mockJWT, mockSessionCache)
+	service := NewAuthService(mockUserRepo, mockSessionRepo, mockLoginAttempts, mockPM, mockJWT, mockSessionCache)
 
 	// Test: Login with correct credentials
 	response, err := service.Login(context.Background(), "alice", "password123")
@@ -326,8 +356,9 @@ func TestAuthService_Login_UserNotFound(t *testing.T) {
 	mockPM := newMockAuthPasswordManager()
 	mockJWT := newMockJWTManager()
 	mockSessionCache := newMockSessionCache()
+	mockLoginAttempts := newMockLoginAttemptRepository()
 
-	service := NewAuthService(mockUserRepo, mockSessionRepo, mockPM, mockJWT, mockSessionCache)
+	service := NewAuthService(mockUserRepo, mockSessionRepo, mockLoginAttempts, mockPM, mockJWT, mockSessionCache)
 
 	// Test: Login with non-existent user
 	_, err := service.Login(context.Background(), "nonexistent", "password")
@@ -349,6 +380,7 @@ func TestAuthService_Login_InvalidPassword(t *testing.T) {
 	mockPM.verifyResult = false
 	mockJWT := newMockJWTManager()
 	mockSessionCache := newMockSessionCache()
+	mockLoginAttempts := newMockLoginAttemptRepository()
 
 	user := &dbqueries.User{
 		ID:           "user-123",
@@ -359,7 +391,7 @@ func TestAuthService_Login_InvalidPassword(t *testing.T) {
 	}
 	mockUserRepo.users["user-123"] = user
 
-	service := NewAuthService(mockUserRepo, mockSessionRepo, mockPM, mockJWT, mockSessionCache)
+	service := NewAuthService(mockUserRepo, mockSessionRepo, mockLoginAttempts, mockPM, mockJWT, mockSessionCache)
 
 	// Test: Login with wrong password
 	_, err := service.Login(context.Background(), "alice", "wrongpassword")
@@ -380,6 +412,7 @@ func TestAuthService_Logout_Success(t *testing.T) {
 	mockPM := newMockAuthPasswordManager()
 	mockJWT := newMockJWTManager()
 	mockSessionCache := newMockSessionCache()
+	mockLoginAttempts := newMockLoginAttemptRepository()
 
 	// Create a session first
 	session := &dbqueries.UserSession{
@@ -390,7 +423,7 @@ func TestAuthService_Logout_Success(t *testing.T) {
 	}
 	mockSessionRepo.sessions["session-123"] = session
 
-	service := NewAuthService(mockUserRepo, mockSessionRepo, mockPM, mockJWT, mockSessionCache)
+	service := NewAuthService(mockUserRepo, mockSessionRepo, mockLoginAttempts, mockPM, mockJWT, mockSessionCache)
 
 	// Test: Logout
 	err := service.Logout(context.Background(), "session-123")
@@ -413,8 +446,9 @@ func TestAuthService_Logout_SessionNotFound(t *testing.T) {
 	mockPM := newMockAuthPasswordManager()
 	mockJWT := newMockJWTManager()
 	mockSessionCache := newMockSessionCache()
+	mockLoginAttempts := newMockLoginAttemptRepository()
 
-	service := NewAuthService(mockUserRepo, mockSessionRepo, mockPM, mockJWT, mockSessionCache)
+	service := NewAuthService(mockUserRepo, mockSessionRepo, mockLoginAttempts, mockPM, mockJWT, mockSessionCache)
 
 	// Test: Logout non-existent session
 	err := service.Logout(context.Background(), "non-existent-session")

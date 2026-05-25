@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/joanob/yourownboss/internal/db/dbqueries"
 )
@@ -38,4 +39,15 @@ type UserSessionRepository interface {
 	// GetUserSessions retrieves all sessions for a user (not soft-deleted).
 	// Returns empty slice if none found.
 	GetUserSessions(ctx context.Context, userID string) ([]*dbqueries.UserSession, error)
+}
+
+// LoginAttemptRepository defines the interface for tracking failed login attempts.
+type LoginAttemptRepository interface {
+	// CountRecentFailed returns the number of failed login attempts for a username
+	// that occurred after `since`.
+	CountRecentFailed(ctx context.Context, username string, since time.Time) (int64, error)
+
+	// RecordFailure records a failed login attempt for a username.
+	// `id` is a new unique UUID for the record.
+	RecordFailure(ctx context.Context, id, username string) error
 }

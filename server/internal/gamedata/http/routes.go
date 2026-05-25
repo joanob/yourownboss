@@ -6,10 +6,9 @@ import (
 	"github.com/joanob/yourownboss/internal/gamedata/service"
 )
 
-// RegisterGamedataRoutes registers all gamedata-related routes
+// RegisterGamedataRoutes registers all public (unauthenticated) gamedata read endpoints.
 func RegisterGamedataRoutes(router chi.Router, gamedataService *service.GamedataService) {
 	router.Route("/api/v1", func(r chi.Router) {
-		// Public gamedata endpoints
 		r.Get("/gamedata", GetGamedataHandler(gamedataService))
 		r.Get("/resources", GetResourcesHandler(gamedataService))
 		r.Get("/resources/{resourceID}", GetResourceHandler(gamedataService))
@@ -17,8 +16,11 @@ func RegisterGamedataRoutes(router chi.Router, gamedataService *service.Gamedata
 		r.Get("/production/buildings/{buildingID}", GetProductionBuildingHandler(gamedataService))
 		r.Get("/sale/buildings", GetSaleBuildingsHandler(gamedataService))
 		r.Get("/sale/buildings/{buildingID}", GetSaleBuildingHandler(gamedataService))
-
-		// Admin-only endpoints - will have admin middleware applied
-		r.Post("/gamedata", PostGamedataHandler(gamedataService))
 	})
+}
+
+// RegisterAdminGamedataRoutes registers the admin-only gamedata import endpoint.
+// The router must already have AuthMiddleware, RequireAuth, and RequireAdmin applied.
+func RegisterAdminGamedataRoutes(router chi.Router, gamedataService *service.GamedataService) {
+	router.Post("/gamedata", PostGamedataHandler(gamedataService))
 }

@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -10,18 +11,23 @@ import (
 
 	"github.com/joanob/yourownboss/internal/company/models"
 	"github.com/joanob/yourownboss/internal/company/service"
+	"github.com/joanob/yourownboss/internal/pkg/cache"
 )
 
 var validate = validator.New()
 
-// APIResponse wraps all API responses
-type APIResponse[T any] struct {
-	Data T `json:"data"`
+// errNoContext is returned when a required value is missing from the request context.
+var errNoContext = errors.New("value not in context")
+
+// companyHTTPResponse wraps all API responses for the company domain.
+type companyHTTPResponse struct {
+	Data  interface{}  `json:"data,omitempty"`
+	Error *errorDetail `json:"error,omitempty"`
 }
 
-// ErrorResponse wraps error responses
-type ErrorResponse struct {
-	Error   string `json:"error"`
+// errorDetail follows the project-wide error format: {"code": "...", "message": "..."}.
+type errorDetail struct {
+	Code    string `json:"code"`
 	Message string `json:"message"`
 }
 
@@ -29,18 +35,18 @@ type ErrorResponse struct {
 // Requests and Responses
 // ============================================================================
 
-// CreateCompanyRequest represents the request body for creating a company
+// CreateCompanyRequest represents the request body for creating a company.
+// Initial money is set server-side from INITIAL_COMPANY_MONEY env var.
 type CreateCompanyRequest struct {
-	Name         string `json:"name" validate:"required,min=1,max=100"`
-	InitialMoney int64  `json:"initial_money" validate:"required,min=0"`
+	Name string `json:"name" validate:"required,min=1,max=100"`
 }
 
-// UpdateCompanyRequest represents the request body for updating a company
+// UpdateCompanyRequest represents the request body for updating a company.
 type UpdateCompanyRequest struct {
 	Name string `json:"name" validate:"required,min=1,max=100"`
 }
 
-// CompanyDTO represents a company in API responses
+// CompanyDTO represents a company in API responses.
 type CompanyDTO struct {
 	ID        string `json:"id"`
 	UserID    string `json:"user_id"`
@@ -49,14 +55,14 @@ type CompanyDTO struct {
 	CreatedAt string `json:"created_at"`
 }
 
-// InventoryItemDTO represents an inventory item in API responses
+// InventoryItemDTO represents an inventory item in API responses.
 type InventoryItemDTO struct {
 	ID         string `json:"id"`
 	ResourceID string `json:"resource_id"`
 	Quantity   int64  `json:"quantity"`
 }
 
-// InventoryDTO represents the entire inventory in API responses
+// InventoryDTO represents the entire inventory in API responses.
 type InventoryDTO struct {
 	Items []InventoryItemDTO `json:"items"`
 }
@@ -65,7 +71,6 @@ type InventoryDTO struct {
 // Utility Functions
 // ============================================================================
 
-// companyToDTO converts a domain Company to API DTO
 func companyToDTO(c *models.Company) CompanyDTO {
 	return CompanyDTO{
 		ID:        c.ID,
@@ -76,7 +81,6 @@ func companyToDTO(c *models.Company) CompanyDTO {
 	}
 }
 
-// inventoryToDTO converts a domain CompanyInventory to API DTO
 func inventoryToDTO(inv *models.CompanyInventory) InventoryDTO {
 	items := make([]InventoryItemDTO, 0, len(inv.Items))
 	for _, item := range inv.Items {
@@ -89,40 +93,29 @@ func inventoryToDTO(inv *models.CompanyInventory) InventoryDTO {
 	return InventoryDTO{Items: items}
 }
 
-// writeError writes an error response
-func writeError(w http.ResponseWriter, statusCode int, errorMsg string, details string) {
+// writeError writes an error response in the project-standard format.
+func writeError(w http.ResponseWriter, statusCode int, code string, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(ErrorResponse{
-		Error:   errorMsg,
-		Message: details,
+	json.NewEncoder(w).Encode(companyHTTPResponse{
+		Error: &errorDetail{Code: code, Message: message},
 	})
 }
 
-// writeJSON writes a successful JSON response
-func writeJSON[T any](w http.ResponseWriter, statusCode int, data T) {
+// writeJSON writes a successful JSON response.
+func writeJSON(w http.ResponseWriter, statusCode int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(APIResponse[T]{Data: data})
+	json.NewEncoder(w).Encode(companyHTTPResponse{Data: data})
 }
 
-// getUserIDFromContext extracts userID from request context
-// In a real application, this would come from the authentication middleware
+// getUserIDFromContext extracts userID from the request context (set by auth middleware).
 func getUserIDFromContext(r *http.Request) (string, error) {
-	userID := r.Context().Value("user_id")
-	if userID == nil {
-		return "", models.ErrInsufficientFunds // Reusing error type
+	userID, ok := r.Context().Value("user_id").(string)
+	if !ok || userID == "" {
+		return "", errNoContext
 	}
-	return userID.(string), nil
-}
-
-// getCompanyIDFromContext extracts companyID from request context
-func getCompanyIDFromContext(r *http.Request) (string, error) {
-	companyID := r.Context().Value("company_id")
-	if companyID == nil {
-		return "", models.ErrInsufficientFunds // Reusing error type
-	}
-	return companyID.(string), nil
+	return userID, nil
 }
 
 // ============================================================================
@@ -134,25 +127,23 @@ func GetCompanyHandler(svc service.CompanyService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		logger := log.With().Str("handler", "GetCompany").Logger()
 
-		// Get userID from context (set by auth middleware)
 		userID, err := getUserIDFromContext(r)
 		if err != nil {
 			logger.Warn().Msg("User not authenticated")
-			writeError(w, http.StatusUnauthorized, "unauthorized", "User not authenticated")
+			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
 			return
 		}
 
-		// Get company
 		company, err := svc.GetCompany(r.Context(), userID)
 		if err != nil {
 			logger.Error().Err(err).Msg("Failed to get company")
-			writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get company")
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get company")
 			return
 		}
 
 		if company == nil {
 			logger.Warn().Str("user_id", userID).Msg("Company not found")
-			writeError(w, http.StatusNotFound, "not_found", "Company not found")
+			writeError(w, http.StatusForbidden, "COMPANY_NOT_FOUND", "User does not have a company")
 			return
 		}
 
@@ -161,44 +152,42 @@ func GetCompanyHandler(svc service.CompanyService) http.HandlerFunc {
 	}
 }
 
-// CreateCompanyHandler handles POST /api/v1/company
-func CreateCompanyHandler(svc service.CompanyService) http.HandlerFunc {
+// CreateCompanyHandler handles POST /api/v1/company.
+// initialMoney is configured server-side via INITIAL_COMPANY_MONEY env var.
+func CreateCompanyHandler(svc service.CompanyService, initialMoney int64) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		logger := log.With().Str("handler", "CreateCompany").Logger()
 
-		// Get userID from context (set by auth middleware)
 		userID, err := getUserIDFromContext(r)
 		if err != nil {
 			logger.Warn().Msg("User not authenticated")
-			writeError(w, http.StatusUnauthorized, "unauthorized", "User not authenticated")
+			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
 			return
 		}
 
-		// Parse request body
 		var req CreateCompanyRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			logger.Warn().Err(err).Msg("Failed to parse request body")
-			writeError(w, http.StatusBadRequest, "bad_request", "Invalid request body")
+			writeError(w, http.StatusBadRequest, "INVALID_INPUT", "Invalid request body")
 			return
 		}
 
-		// Validate request
 		if err := validate.Struct(req); err != nil {
 			logger.Warn().Err(err).Msg("Request validation failed")
-			writeError(w, http.StatusBadRequest, "validation_error", "Request validation failed")
+			writeError(w, http.StatusBadRequest, "INVALID_INPUT", "Validation failed: name is required (1–100 chars)")
 			return
 		}
 
-		// Create company
-		company, err := svc.CreateCompany(r.Context(), userID, req.Name, req.InitialMoney)
+		company, err := svc.CreateCompany(r.Context(), userID, req.Name, initialMoney)
 		if err != nil {
-			if err == models.ErrCompanyAlreadyExists {
+			switch {
+			case errors.Is(err, models.ErrCompanyAlreadyExists):
 				logger.Warn().Str("user_id", userID).Msg("Company already exists")
-				writeError(w, http.StatusConflict, "company_exists", "Company already exists for this user")
-				return
+				writeError(w, http.StatusConflict, "COMPANY_ALREADY_EXISTS", "User already has a company")
+			default:
+				logger.Error().Err(err).Msg("Failed to create company")
+				writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create company")
 			}
-			logger.Error().Err(err).Msg("Failed to create company")
-			writeError(w, http.StatusInternalServerError, "internal_error", "Failed to create company")
 			return
 		}
 
@@ -212,48 +201,42 @@ func UpdateCompanyHandler(svc service.CompanyService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		logger := log.With().Str("handler", "UpdateCompany").Logger()
 
-		// Get userID from context (set by auth middleware)
 		userID, err := getUserIDFromContext(r)
 		if err != nil {
 			logger.Warn().Msg("User not authenticated")
-			writeError(w, http.StatusUnauthorized, "unauthorized", "User not authenticated")
+			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
 			return
 		}
 
-		// Get company to find its ID
 		company, err := svc.GetCompany(r.Context(), userID)
 		if err != nil {
 			logger.Error().Err(err).Msg("Failed to get company")
-			writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get company")
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get company")
 			return
 		}
-
 		if company == nil {
 			logger.Warn().Str("user_id", userID).Msg("Company not found")
-			writeError(w, http.StatusNotFound, "not_found", "Company not found")
+			writeError(w, http.StatusForbidden, "COMPANY_NOT_FOUND", "User does not have a company")
 			return
 		}
 
-		// Parse request body
 		var req UpdateCompanyRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			logger.Warn().Err(err).Msg("Failed to parse request body")
-			writeError(w, http.StatusBadRequest, "bad_request", "Invalid request body")
+			writeError(w, http.StatusBadRequest, "INVALID_INPUT", "Invalid request body")
 			return
 		}
 
-		// Validate request
 		if err := validate.Struct(req); err != nil {
 			logger.Warn().Err(err).Msg("Request validation failed")
-			writeError(w, http.StatusBadRequest, "validation_error", "Request validation failed")
+			writeError(w, http.StatusBadRequest, "INVALID_INPUT", "Validation failed: name is required (1–100 chars)")
 			return
 		}
 
-		// Update company
 		updatedCompany, err := svc.UpdateCompanyName(r.Context(), company.ID, req.Name)
 		if err != nil {
 			logger.Error().Err(err).Msg("Failed to update company")
-			writeError(w, http.StatusInternalServerError, "internal_error", "Failed to update company")
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update company")
 			return
 		}
 
@@ -262,85 +245,82 @@ func UpdateCompanyHandler(svc service.CompanyService) http.HandlerFunc {
 	}
 }
 
-// DeleteCompanyHandler handles DELETE /api/v1/company
-func DeleteCompanyHandler(svc service.CompanyService) http.HandlerFunc {
+// DeleteCompanyHandler handles DELETE /api/v1/company.
+// After deletion, clears company_id from all active session cache entries for the user
+// so that renewed session tokens reflect the deleted company (per spec).
+func DeleteCompanyHandler(svc service.CompanyService, sessionCache *cache.SessionCache) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		logger := log.With().Str("handler", "DeleteCompany").Logger()
 
-		// Get userID from context (set by auth middleware)
 		userID, err := getUserIDFromContext(r)
 		if err != nil {
 			logger.Warn().Msg("User not authenticated")
-			writeError(w, http.StatusUnauthorized, "unauthorized", "User not authenticated")
+			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
 			return
 		}
 
-		// Get company to find its ID
 		company, err := svc.GetCompany(r.Context(), userID)
 		if err != nil {
 			logger.Error().Err(err).Msg("Failed to get company")
-			writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get company")
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get company")
 			return
 		}
-
 		if company == nil {
 			logger.Warn().Str("user_id", userID).Msg("Company not found")
-			writeError(w, http.StatusNotFound, "not_found", "Company not found")
+			writeError(w, http.StatusForbidden, "COMPANY_NOT_FOUND", "User does not have a company")
 			return
 		}
 
-		// Delete company
-		err = svc.DeleteCompany(r.Context(), company.ID)
-		if err != nil {
+		if err := svc.DeleteCompany(r.Context(), company.ID); err != nil {
 			logger.Error().Err(err).Msg("Failed to delete company")
-			writeError(w, http.StatusInternalServerError, "internal_error", "Failed to delete company")
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete company")
 			return
 		}
+
+		// Clear company_id from all active sessions so renewed tokens have company_id = null.
+		sessionCache.ClearCompanyID(userID)
 
 		logger.Info().Str("company_id", company.ID).Msg("Company deleted successfully")
-		w.WriteHeader(http.StatusNoContent)
+		writeJSON(w, http.StatusOK, map[string]interface{}{})
 	}
 }
 
 // GetInventoryHandler handles GET /api/v1/company/inventory
-func GetInventoryHandler(svc service.InventoryService) http.HandlerFunc {
+func GetInventoryHandler(companySvc service.CompanyService, invSvc service.InventoryService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		logger := log.With().Str("handler", "GetInventory").Logger()
 
-		// Get userID from context (set by auth middleware)
 		userID, err := getUserIDFromContext(r)
 		if err != nil {
 			logger.Warn().Msg("User not authenticated")
-			writeError(w, http.StatusUnauthorized, "unauthorized", "User not authenticated")
+			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
 			return
 		}
 
-		// For now, get companyID from context (in a real app, we'd look up company by userID)
-		// This would normally come from auth middleware or be looked up from userID
-		companyID, err := getCompanyIDFromContext(r)
+		// Look up company by userID (company_id in JWT may be stale or nil).
+		company, err := companySvc.GetCompany(r.Context(), userID)
 		if err != nil {
-			// Fallback: Try to get from user's company
-			// This is a temporary solution - in production we'd have this in auth middleware
-			logger.Warn().Str("user_id", userID).Msg("Company ID not in context")
-			writeError(w, http.StatusUnauthorized, "unauthorized", "User not authenticated")
+			logger.Error().Err(err).Msg("Failed to get company")
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get company")
+			return
+		}
+		if company == nil {
+			logger.Warn().Str("user_id", userID).Msg("Company not found")
+			writeError(w, http.StatusForbidden, "COMPANY_NOT_FOUND", "User does not have a company")
 			return
 		}
 
-		// Get inventory
-		inventory, err := svc.GetInventory(r.Context(), companyID)
+		inventory, err := invSvc.GetInventory(r.Context(), company.ID)
 		if err != nil {
 			logger.Error().Err(err).Msg("Failed to get inventory")
-			writeError(w, http.StatusInternalServerError, "internal_error", "Failed to get inventory")
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get inventory")
 			return
 		}
-
 		if inventory == nil {
-			logger.Warn().Str("company_id", companyID).Msg("Inventory not found")
-			writeError(w, http.StatusNotFound, "not_found", "Inventory not found")
-			return
+			inventory = models.NewCompanyInventory(company.ID)
 		}
 
-		logger.Debug().Str("company_id", companyID).Int("item_count", len(inventory.Items)).Msg("Inventory retrieved successfully")
+		logger.Debug().Str("company_id", company.ID).Int("item_count", len(inventory.Items)).Msg("Inventory retrieved successfully")
 		writeJSON(w, http.StatusOK, inventoryToDTO(inventory))
 	}
 }

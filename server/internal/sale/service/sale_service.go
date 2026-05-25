@@ -180,9 +180,10 @@ func (s *SaleService) UpgradeBuilding(ctx context.Context, companyID, buildingID
 		return nil, err
 	}
 
-	// Update level and construction time
+	// Update level and construction time.
+	// Upgrade time equals construction time regardless of how many levels are upgraded (per spec).
 	newLevel := building.Level + levels
-	constructionEndsAt := time.Now().UTC().Add(time.Duration(masterBuilding.ConstructionTimeS*levels) * time.Second)
+	constructionEndsAt := time.Now().UTC().Add(time.Duration(masterBuilding.ConstructionTimeS) * time.Second)
 	if err := s.buildingRepo.UpdateBuildingLevel(ctx, buildingID, newLevel, constructionEndsAt); err != nil {
 		return nil, err
 	}

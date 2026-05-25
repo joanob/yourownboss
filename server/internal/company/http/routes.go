@@ -4,19 +4,16 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/joanob/yourownboss/internal/company/service"
+	"github.com/joanob/yourownboss/internal/pkg/cache"
 )
 
-// RegisterCompanyRoutes registers all company-related routes
-// The router should already be scoped to /api/v1
-func RegisterCompanyRoutes(router chi.Router, companyService service.CompanyService, inventoryService service.InventoryService) {
-	// Note: All routes require authentication middleware to be applied at parent router level
-
-	// Company routes
+// RegisterCompanyRoutes registers all company-related routes.
+// The router should already be scoped to /api/v1 with auth middleware applied.
+func RegisterCompanyRoutes(router chi.Router, companyService service.CompanyService, inventoryService service.InventoryService, initialMoney int64, sessionCache *cache.SessionCache) {
 	router.Get("/company", GetCompanyHandler(companyService))
-	router.Post("/company", CreateCompanyHandler(companyService))
+	router.Post("/company", CreateCompanyHandler(companyService, initialMoney))
 	router.Put("/company", UpdateCompanyHandler(companyService))
-	router.Delete("/company", DeleteCompanyHandler(companyService))
+	router.Delete("/company", DeleteCompanyHandler(companyService, sessionCache))
 
-	// Inventory routes
-	router.Get("/company/inventory", GetInventoryHandler(inventoryService))
+	router.Get("/company/inventory", GetInventoryHandler(companyService, inventoryService))
 }

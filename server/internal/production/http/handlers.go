@@ -9,8 +9,11 @@ import (
 	"github.com/rs/zerolog/log"
 
 	companyModels "github.com/joanob/yourownboss/internal/company/models"
+	"github.com/joanob/yourownboss/internal/pkg/cache"
 	"github.com/joanob/yourownboss/internal/production/service"
 )
+
+const productionRateLimit = 20
 
 // httpResponse wraps all HTTP responses
 type httpResponse struct {
@@ -124,11 +127,23 @@ type StartProductionRequest struct {
 }
 
 // StartProductionHandler handles POST /api/v1/company/production/buildings/:id/start
-func StartProductionHandler(svc *service.ProductionService) http.HandlerFunc {
+func StartProductionHandler(svc *service.ProductionService, rateLimiter *cache.RateLimiter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := r.Context().Value("user_id").(string)
+		if !ok || userID == "" {
+			respondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+			return
+		}
+
 		companyID, ok := r.Context().Value("company_id").(string)
 		if !ok || companyID == "" {
 			respondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+			return
+		}
+
+		if !rateLimiter.Allow(userID, "production_start", productionRateLimit) {
+			log.Warn().Str("user_id", userID).Msg("Rate limit exceeded for production start")
+			respondError(w, http.StatusTooManyRequests, "RATE_LIMIT_EXCEEDED", "Too many requests, please slow down")
 			return
 		}
 
@@ -156,6 +171,8 @@ func StartProductionHandler(svc *service.ProductionService) http.HandlerFunc {
 			handleProductionError(w, err)
 			return
 		}
+
+		rateLimiter.Record(userID, "production_start")
 
 		respondData(w, http.StatusOK, building)
 	}

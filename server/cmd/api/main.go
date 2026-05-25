@@ -27,6 +27,7 @@ import (
 	companysvc "github.com/joanob/yourownboss/internal/company/service"
 	"github.com/joanob/yourownboss/internal/db"
 	"github.com/joanob/yourownboss/internal/db/dbqueries"
+	gameDataHttp "github.com/joanob/yourownboss/internal/gamedata/http"
 	gameDataService "github.com/joanob/yourownboss/internal/gamedata/service"
 	markethttphandlers "github.com/joanob/yourownboss/internal/market/http"
 	marketsvc "github.com/joanob/yourownboss/internal/market/service"
@@ -100,6 +101,11 @@ func main() {
 	if initialCompanyMoney == "" {
 		initialCompanyMoney = "1000"
 	}
+	initialCompanyMoneyInt, err := strconv.ParseInt(initialCompanyMoney, 10, 64)
+	if err != nil || initialCompanyMoneyInt <= 0 {
+		logger.Warn().Str("value", initialCompanyMoney).Msg("INITIAL_COMPANY_MONEY inválido. Usando 1000 por defecto")
+		initialCompanyMoneyInt = 1000
+	}
 
 	// Inicializar base de datos
 	dbPath := os.Getenv("DATABASE_URL")
@@ -157,6 +163,7 @@ func main() {
 	// Crear Repositories
 	userRepository := userrepo.NewUserRepository(queries)
 	sessionRepository := authrepo.NewUserSessionRepository(queries)
+	loginAttemptRepository := authrepo.NewLoginAttemptRepository(queries)
 	companyRepository := companyrepo.NewCompanyRepository(queries)
 	inventoryRepository := companyrepo.NewInventoryRepository(queries)
 
@@ -178,9 +185,12 @@ func main() {
 	// Audit repository (Phase 7)
 	auditRepository := auditrepo.NewAuditRepository(queries)
 
+	// Rate limiter (Phase 8 — market/production anti-abuse)
+	rateLimiter := cache.NewRateLimiter()
+
 	// Crear Services
 	userService := usersvc.NewUserService(userRepository, passwordManager)
-	authService := authsvc.NewAuthService(userRepository, sessionRepository, passwordManager, jwtManager, sessionCache)
+	authService := authsvc.NewAuthService(userRepository, sessionRepository, loginAttemptRepository, passwordManager, jwtManager, sessionCache)
 	companyService := companysvc.NewCompanyService(companyRepository, inventoryRepository)
 	inventoryService := companysvc.NewInventoryService(inventoryRepository, companyRepository)
 
@@ -301,12 +311,23 @@ func main() {
 	// Registrar rutas de company, market y production (requieren autenticación)
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(authhttphandlers.AuthMiddleware(jwtManager, sessionCache))
-		companyhttphandlers.RegisterCompanyRoutes(r, companyService, inventoryService)
-		markethttphandlers.RegisterMarketRoutes(r, marketService)
-		productionhttphandlers.RegisterProductionRoutes(r, productionService)
+		companyhttphandlers.RegisterCompanyRoutes(r, companyService, inventoryService, initialCompanyMoneyInt, sessionCache)
+		markethttphandlers.RegisterMarketRoutes(r, marketService, rateLimiter)
+		productionhttphandlers.RegisterProductionRoutes(r, productionService, rateLimiter)
 		salehttphandlers.RegisterSaleRoutes(r, saleService)
+
+		// Admin-only endpoints (require auth + admin role)
+		r.Group(func(r chi.Router) {
+			r.Use(authhttphandlers.RequireAuth())
+			r.Use(authhttphandlers.RequireAdmin(userRepository))
+			gameDataHttp.RegisterAdminGamedataRoutes(r, gamedataSvc)
+		})
 	})
 	logger.Debug().Msg("Rutas de company, market, production y sale registradas")
+
+	// Registrar rutas públicas de gamedata (sin autenticación)
+	gameDataHttp.RegisterGamedataRoutes(r, gamedataSvc)
+	logger.Debug().Msg("Rutas públicas de gamedata registradas")
 
 	logger.Info().Msg("Rutas registradas exitosamente")
 

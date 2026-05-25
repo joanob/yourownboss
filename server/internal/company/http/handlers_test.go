@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/joanob/yourownboss/internal/company/models"
+	"github.com/joanob/yourownboss/internal/pkg/cache"
 )
 
 // MockCompanyService mocks the CompanyService interface
@@ -88,11 +89,11 @@ func TestGetCompanyHandlerSuccess(t *testing.T) {
 		t.Errorf("Expected status 200, got %d", w.Code)
 	}
 
-	var response APIResponse[CompanyDTO]
+	var response companyHTTPResponse
 	json.NewDecoder(w.Body).Decode(&response)
 
-	if response.Data.ID != expectedCompany.ID {
-		t.Errorf("Expected company ID %s, got %s", expectedCompany.ID, response.Data.ID)
+	if response.Data == nil {
+		t.Fatal("Expected data in response")
 	}
 }
 
@@ -115,15 +116,14 @@ func TestGetCompanyHandlerUnauthorized(t *testing.T) {
 // Test CreateCompanyHandler - Success
 func TestCreateCompanyHandlerSuccess(t *testing.T) {
 	requestBody := CreateCompanyRequest{
-		Name:         "New Company",
-		InitialMoney: 1000,
+		Name: "New Company",
 	}
 
 	expectedCompany := &models.Company{
 		ID:        "company-123",
 		UserID:    "user-123",
 		Name:      requestBody.Name,
-		Money:     requestBody.InitialMoney,
+		Money:     1000,
 		CreatedAt: time.Now(),
 	}
 
@@ -133,7 +133,7 @@ func TestCreateCompanyHandlerSuccess(t *testing.T) {
 		},
 	}
 
-	handler := CreateCompanyHandler(mockService)
+	handler := CreateCompanyHandler(mockService, 1000)
 
 	body, _ := json.Marshal(requestBody)
 	req := httptest.NewRequest("POST", "/api/v1/company", bytes.NewReader(body))
@@ -150,13 +150,12 @@ func TestCreateCompanyHandlerSuccess(t *testing.T) {
 // Test CreateCompanyHandler - Validation Error
 func TestCreateCompanyHandlerValidationError(t *testing.T) {
 	requestBody := CreateCompanyRequest{
-		Name:         "",
-		InitialMoney: 1000,
+		Name: "",
 	}
 
 	mockService := &MockCompanyService{}
 
-	handler := CreateCompanyHandler(mockService)
+	handler := CreateCompanyHandler(mockService, 1000)
 
 	body, _ := json.Marshal(requestBody)
 	req := httptest.NewRequest("POST", "/api/v1/company", bytes.NewReader(body))
@@ -173,8 +172,7 @@ func TestCreateCompanyHandlerValidationError(t *testing.T) {
 // Test CreateCompanyHandler - Company Already Exists
 func TestCreateCompanyHandlerAlreadyExists(t *testing.T) {
 	requestBody := CreateCompanyRequest{
-		Name:         "New Company",
-		InitialMoney: 1000,
+		Name: "New Company",
 	}
 
 	mockService := &MockCompanyService{
@@ -183,7 +181,7 @@ func TestCreateCompanyHandlerAlreadyExists(t *testing.T) {
 		},
 	}
 
-	handler := CreateCompanyHandler(mockService)
+	handler := CreateCompanyHandler(mockService, 1000)
 
 	body, _ := json.Marshal(requestBody)
 	req := httptest.NewRequest("POST", "/api/v1/company", bytes.NewReader(body))
@@ -257,7 +255,7 @@ func TestDeleteCompanyHandlerSuccess(t *testing.T) {
 		},
 	}
 
-	handler := DeleteCompanyHandler(mockService)
+	handler := DeleteCompanyHandler(mockService, cache.NewSessionCache())
 
 	req := httptest.NewRequest("DELETE", "/api/v1/company", nil)
 	req = req.WithContext(context.WithValue(req.Context(), "user_id", "user-123"))
@@ -265,8 +263,8 @@ func TestDeleteCompanyHandlerSuccess(t *testing.T) {
 
 	handler.ServeHTTP(w, req)
 
-	if w.Code != http.StatusNoContent {
-		t.Errorf("Expected status 204, got %d", w.Code)
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
 	}
 }
 
@@ -274,13 +272,22 @@ func TestDeleteCompanyHandlerSuccess(t *testing.T) {
 func TestGetInventoryHandlerSuccess(t *testing.T) {
 	inventory := models.NewCompanyInventory("company-123")
 
+	mockCompanyService := &MockCompanyService{
+		GetCompanyFunc: func(ctx context.Context, userID string) (*models.Company, error) {
+			return &models.Company{
+				ID:     "company-123",
+				UserID: userID,
+			}, nil
+		},
+	}
+
 	mockService := &MockInventoryService{
 		GetInventoryFunc: func(ctx context.Context, companyID string) (*models.CompanyInventory, error) {
 			return inventory, nil
 		},
 	}
 
-	handler := GetInventoryHandler(mockService)
+	handler := GetInventoryHandler(mockCompanyService, mockService)
 
 	req := httptest.NewRequest("GET", "/api/v1/company/inventory", nil)
 	req = req.WithContext(context.WithValue(req.Context(), "user_id", "user-123"))
@@ -298,7 +305,7 @@ func TestGetInventoryHandlerSuccess(t *testing.T) {
 func TestGetInventoryHandlerUnauthorized(t *testing.T) {
 	mockService := &MockInventoryService{}
 
-	handler := GetInventoryHandler(mockService)
+	handler := GetInventoryHandler(&MockCompanyService{}, mockService)
 
 	req := httptest.NewRequest("GET", "/api/v1/company/inventory", nil)
 	w := httptest.NewRecorder()

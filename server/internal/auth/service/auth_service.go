@@ -70,33 +70,53 @@ type User struct {
 
 // authService implements AuthService.
 type authService struct {
-	userRepo        userrepo.UserRepository
-	sessionRepo     repository.UserSessionRepository
-	passwordManager PasswordManager
-	jwtManager      JWTManager
-	sessionCache    SessionCache
+	userRepo         userrepo.UserRepository
+	sessionRepo      repository.UserSessionRepository
+	loginAttemptRepo repository.LoginAttemptRepository
+	passwordManager  PasswordManager
+	jwtManager       JWTManager
+	sessionCache     SessionCache
 }
 
 // NewAuthService creates a new auth service with dependency injection.
 func NewAuthService(
 	userRepo userrepo.UserRepository,
 	sessionRepo repository.UserSessionRepository,
+	loginAttemptRepo repository.LoginAttemptRepository,
 	passwordManager PasswordManager,
 	jwtManager JWTManager,
 	sessionCache SessionCache,
 ) AuthService {
 	return &authService{
-		userRepo:        userRepo,
-		sessionRepo:     sessionRepo,
-		passwordManager: passwordManager,
-		jwtManager:      jwtManager,
-		sessionCache:    sessionCache,
+		userRepo:         userRepo,
+		sessionRepo:      sessionRepo,
+		loginAttemptRepo: loginAttemptRepo,
+		passwordManager:  passwordManager,
+		jwtManager:       jwtManager,
+		sessionCache:     sessionCache,
 	}
 }
+
+const (
+	loginMaxAttempts = 5
+	loginBlockWindow = 15 * time.Minute
+)
 
 // Login authenticates a user and creates a session.
 func (s *authService) Login(ctx context.Context, username, password string) (*LoginResponse, error) {
 	log.Info().Str("username", username).Msg("Login attempt")
+
+	// Check rate limiting: block if >= 5 failed attempts in the last 15 minutes.
+	since := time.Now().UTC().Add(-loginBlockWindow)
+	failCount, err := s.loginAttemptRepo.CountRecentFailed(ctx, username, since)
+	if err != nil {
+		log.Error().Err(err).Str("username", username).Msg("Failed to check login attempts")
+		return nil, fmt.Errorf("failed to check login attempts: %w", err)
+	}
+	if failCount >= loginMaxAttempts {
+		log.Warn().Str("username", username).Int64("fail_count", failCount).Msg("Login blocked: too many failed attempts")
+		return nil, fmt.Errorf("too_many_attempts")
+	}
 
 	// Get user by username
 	user, err := s.userRepo.GetByUsername(ctx, username)
@@ -106,12 +126,19 @@ func (s *authService) Login(ctx context.Context, username, password string) (*Lo
 	}
 	if user == nil {
 		log.Warn().Str("username", username).Msg("Login failed: user not found")
+		// Record failure — use username as key; no user_id available.
+		if recordErr := s.loginAttemptRepo.RecordFailure(ctx, uuid.New().String(), username); recordErr != nil {
+			log.Error().Err(recordErr).Str("username", username).Msg("Failed to record login failure")
+		}
 		return nil, fmt.Errorf("invalid_credentials")
 	}
 
 	// Verify password
 	if !s.passwordManager.VerifyPassword(password, user.PasswordHash) {
 		log.Warn().Str("username", username).Msg("Login failed: invalid password")
+		if recordErr := s.loginAttemptRepo.RecordFailure(ctx, uuid.New().String(), username); recordErr != nil {
+			log.Error().Err(recordErr).Str("username", username).Msg("Failed to record login failure")
+		}
 		return nil, fmt.Errorf("invalid_credentials")
 	}
 
