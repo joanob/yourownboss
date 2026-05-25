@@ -170,7 +170,7 @@ CREATE TABLE IF NOT EXISTS login_attempts (
   is_deleted     INTEGER  NOT NULL DEFAULT 0
 );
 
-CREATE INDEX IF NOT EXISTS idx_login_attempts_username ON login_attempts(username, failed_at);
+CREATE INDEX IF NOT EXISTS idx_login_attempts_username ON login_attempts(username, failed_at) WHERE is_deleted = 0;
 
 -- AUDITORÍA
 

@@ -57,7 +57,7 @@ func BuyResourceHandler(marketService *service.MarketService, rateLimiter *cache
 			return
 		}
 
-		if !rateLimiter.Allow(userID, "market_buy", marketRateLimit) {
+		if !rateLimiter.AllowAndRecord(userID, "market_buy", marketRateLimit) {
 			logger.Warn().Str("user_id", userID).Msg("Rate limit exceeded for market buy")
 			respondWithError(w, http.StatusTooManyRequests, "RATE_LIMIT_EXCEEDED", "Too many requests, please slow down")
 			return
@@ -85,8 +85,6 @@ func BuyResourceHandler(marketService *service.MarketService, rateLimiter *cache
 			return
 		}
 
-		rateLimiter.Record(userID, "market_buy")
-
 		respondWithData(w, http.StatusOK, MarketResponse{
 			Company:   result.Company.ToDTO(),
 			Inventory: result.Inventory.ToDTO(),
@@ -113,7 +111,7 @@ func SellResourceHandler(marketService *service.MarketService, rateLimiter *cach
 			return
 		}
 
-		if !rateLimiter.Allow(userID, "market_sell", marketRateLimit) {
+		if !rateLimiter.AllowAndRecord(userID, "market_sell", marketRateLimit) {
 			logger.Warn().Str("user_id", userID).Msg("Rate limit exceeded for market sell")
 			respondWithError(w, http.StatusTooManyRequests, "RATE_LIMIT_EXCEEDED", "Too many requests, please slow down")
 			return
@@ -140,8 +138,6 @@ func SellResourceHandler(marketService *service.MarketService, rateLimiter *cach
 			handleMarketError(w, err)
 			return
 		}
-
-		rateLimiter.Record(userID, "market_sell")
 
 		respondWithData(w, http.StatusOK, MarketResponse{
 			Company:   result.Company.ToDTO(),

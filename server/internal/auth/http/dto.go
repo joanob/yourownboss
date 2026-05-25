@@ -24,10 +24,9 @@ type UserDTO struct {
 }
 
 // LoginResponse is the response body for successful login.
+// SEC-02: tokens are delivered only via httpOnly cookies, NOT in the body.
 type LoginResponse struct {
 	User             *UserDTO `json:"user"`
-	SessionToken     string   `json:"session_token"`
-	RefreshToken     string   `json:"refresh_token"`
 	SessionExpiresAt int64    `json:"session_expires_at"`
 }
 

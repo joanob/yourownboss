@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -187,6 +188,8 @@ func main() {
 
 	// Rate limiter (Phase 8 — market/production anti-abuse)
 	rateLimiter := cache.NewRateLimiter()
+	// Iniciar limpieza periódica de entradas antiguas del rate limiter (SEC-05)
+	rateLimiter.StartCleanup(5 * time.Minute)
 
 	// Crear Services
 	userService := usersvc.NewUserService(userRepository, passwordManager)
@@ -245,15 +248,16 @@ func main() {
 	if adminPassword == "" {
 		logger.Warn().Msg("ADMIN_PASSWORD no configurado. Admin no será creado automáticamente")
 	} else {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
+		// CODE-04: cancel explícito al salir del bloque, no defer (que se ejecutaría al final de main)
+		adminCtx, adminCancel := context.WithTimeout(context.Background(), 5*time.Second)
 
 		// Verificar si admin ya existe
-		adminUser, _ := userRepository.GetByUsername(ctx, "admin")
+		adminUser, _ := userRepository.GetByUsername(adminCtx, "admin")
 		if adminUser == nil {
 			logger.Info().Msg("Creando usuario admin...")
-			_, err := userService.Register(ctx, "admin", "admin@yourownboss.local", adminPassword, "UTC")
+			_, err := userService.Register(adminCtx, "admin", "admin@yourownboss.local", adminPassword, "UTC")
 			if err != nil {
+				adminCancel()
 				logger.Error().Err(err).Msg("Error al crear usuario admin")
 				os.Exit(1)
 			}
@@ -261,6 +265,7 @@ func main() {
 		} else {
 			logger.Info().Msg("Usuario admin ya existe")
 		}
+		adminCancel()
 	}
 
 	// ============================================================================
@@ -277,7 +282,10 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	// CORS middleware
+	// Security headers (SEC-08): X-Content-Type-Options, X-Frame-Options, etc.
+	r.Use(securityHeadersMiddleware())
+
+	// CORS middleware (SEC-01): valida origen contra lista blanca
 	r.Use(corsMiddleware())
 
 	// Timeout middleware (30 segundos)
@@ -346,13 +354,15 @@ func main() {
 	}
 }
 
-// generateRandomSecret generates a random secret of the specified length
+// generateRandomSecret generates a cryptographically random secret encoded as base64.
+// The length parameter controls the number of random bytes (not the output length).
+// SEC-10: no truncation — the full base64 encoding preserves all entropy.
 func generateRandomSecret(length int) string {
 	bytes := make([]byte, length)
 	if _, err := rand.Read(bytes); err != nil {
 		panic(err)
 	}
-	return base64.URLEncoding.EncodeToString(bytes)[:length]
+	return base64.URLEncoding.EncodeToString(bytes)
 }
 
 // makeHealthHandler returns a handler that includes db connectivity in the status response
@@ -378,7 +388,22 @@ func makeHealthHandler(dbConn interface{ Ping() error }) http.HandlerFunc {
 	}
 }
 
-// corsMiddleware agrega headers CORS
+// securityHeadersMiddleware añade cabeceras de seguridad HTTP estándar (SEC-08).
+func securityHeadersMiddleware() func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			w.Header().Set("X-Frame-Options", "DENY")
+			w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+			w.Header().Set("Content-Security-Policy", "default-src 'none'")
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// corsMiddleware valida el origen contra la lista blanca antes de establecer
+// Access-Control-Allow-Origin (SEC-01). Un origen no listado no recibe la cabecera
+// y el navegador bloqueará la petición cross-origin.
 func corsMiddleware() func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -387,9 +412,20 @@ func corsMiddleware() func(next http.Handler) http.Handler {
 				allowedOrigins = "http://localhost:3000"
 			}
 
+			// Construir conjunto de orígenes permitidos
+			allowed := make(map[string]bool)
+			for _, o := range strings.Split(allowedOrigins, ",") {
+				if trimmed := strings.TrimSpace(o); trimmed != "" {
+					allowed[trimmed] = true
+				}
+			}
+
 			origin := r.Header.Get("Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			if allowed[origin] {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+				w.Header().Set("Vary", "Origin")
+			}
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 

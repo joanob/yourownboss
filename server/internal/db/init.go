@@ -37,6 +37,22 @@ func InitDatabase(dbPath string) (*sql.DB, error) {
 		return nil, fmt.Errorf("error al habilitar foreign keys: %w", err)
 	}
 
+	// Habilitar WAL para mejor rendimiento bajo concurrencia (PERF-01)
+	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
+		return nil, fmt.Errorf("error al configurar WAL: %w", err)
+	}
+	// NORMAL: fsync sólo en checkpoints; equilibrio rendimiento/durabilidad adecuado para juego
+	if _, err := db.Exec("PRAGMA synchronous=NORMAL"); err != nil {
+		return nil, fmt.Errorf("error al configurar synchronous: %w", err)
+	}
+	// Esperar hasta 5s antes de devolver SQLITE_BUSY en lugar de fallar inmediatamente
+	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
+		return nil, fmt.Errorf("error al configurar busy_timeout: %w", err)
+	}
+	// SQLite no soporta escrituras concurrentes reales; limitar a 1 conexión de escritura
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+
 	// Leer y ejecutar schema.sql
 	schemaPath := filepath.Join(filepath.Dir(dbPath), "migrations", "schema.sql")
 	if _, err := os.Stat(schemaPath); os.IsNotExist(err) {

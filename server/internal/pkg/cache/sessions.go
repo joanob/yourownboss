@@ -13,20 +13,24 @@ type SessionData struct {
 	VerificationString string
 	TokenHash          string // hash del refresh token
 	ExpiresAt          time.Time
-	RevokedAt          *time.Time // nil si sesión no está revocada
+	RevokedAt          *time.Time // siempre nil en entradas activas; conservado por compatibilidad
 	CreatedAt          time.Time
 }
 
-// SessionCache almacena sesiones de usuario con TTL
+// SessionCache almacena sesiones de usuario con TTL.
+// PERF-05: mantiene un índice inverso userID→[]sessionID para que ClearCompanyID
+// sea O(k) en lugar de O(N) sobre todas las sesiones.
 type SessionCache struct {
-	sessions map[string]SessionData
-	mu       sync.RWMutex
+	sessions     map[string]SessionData // sessionID → SessionData
+	userSessions map[string][]string    // userID → []sessionID (índice inverso)
+	mu           sync.RWMutex
 }
 
 // NewSessionCache crea una nueva instancia del cache de sesiones
 func NewSessionCache() *SessionCache {
 	return &SessionCache{
-		sessions: make(map[string]SessionData),
+		sessions:     make(map[string]SessionData),
+		userSessions: make(map[string][]string),
 	}
 }
 
@@ -41,21 +45,17 @@ func (sc *SessionCache) Store(sessionID string, data SessionData) {
 	defer sc.mu.Unlock()
 
 	sc.sessions[sessionID] = data
+	sc.userSessions[data.UserID] = append(sc.userSessions[data.UserID], sessionID)
 }
 
 // Get obtiene una sesión por ID
-// Retorna la sesión y true si existe y no ha expirado, false si no existe, expiró o está revocada
+// Retorna la sesión y true si existe y no ha expirado, false si no existe o expiró.
 func (sc *SessionCache) Get(sessionID string) (SessionData, bool) {
 	sc.mu.RLock()
 	defer sc.mu.RUnlock()
 
 	session, exists := sc.sessions[sessionID]
 	if !exists {
-		return SessionData{}, false
-	}
-
-	// Verificar que no está revocada
-	if session.RevokedAt != nil {
 		return SessionData{}, false
 	}
 
@@ -67,29 +67,50 @@ func (sc *SessionCache) Get(sessionID string) (SessionData, bool) {
 	return session, true
 }
 
-// Revoke marca una sesión como revocada
+// Revoke elimina inmediatamente una sesión del cache.
+// PERF-08: la eliminación inmediata evita que sesiones revocadas acumulen memoria
+// hasta el siguiente ciclo de limpieza.
 func (sc *SessionCache) Revoke(sessionID string) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 
-	session, exists := sc.sessions[sessionID]
-	if exists {
-		now := time.Now()
-		session.RevokedAt = &now
-		sc.sessions[sessionID] = session
-	}
+	sc.deleteSession(sessionID)
 }
 
-// Delete elimina una sesión del cache
+// Delete elimina una sesión del cache.
 func (sc *SessionCache) Delete(sessionID string) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 
+	sc.deleteSession(sessionID)
+}
+
+// deleteSession elimina la sesión de ambos mapas. Debe llamarse con el lock adquirido.
+func (sc *SessionCache) deleteSession(sessionID string) {
+	session, exists := sc.sessions[sessionID]
+	if !exists {
+		return
+	}
+
+	// Eliminar del índice inverso
+	userID := session.UserID
+	ids := sc.userSessions[userID]
+	for i, id := range ids {
+		if id == sessionID {
+			sc.userSessions[userID] = append(ids[:i], ids[i+1:]...)
+			break
+		}
+	}
+	if len(sc.userSessions[userID]) == 0 {
+		delete(sc.userSessions, userID)
+	}
+
 	delete(sc.sessions, sessionID)
 }
 
-// CleanupExpired elimina sesiones expiradas y revocadas del cache
-// Se debe llamar periódicamente (cada 6 horas según especificación)
+// CleanupExpired elimina sesiones expiradas del cache.
+// Se debe llamar periódicamente (cada 6 horas según especificación).
+// Con PERF-08, las sesiones revocadas ya se eliminan al momento de la revocación.
 func (sc *SessionCache) CleanupExpired() int {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
@@ -98,9 +119,8 @@ func (sc *SessionCache) CleanupExpired() int {
 	now := time.Now()
 
 	for sessionID, session := range sc.sessions {
-		// Eliminar si expiró o está revocada
-		if now.After(session.ExpiresAt) || session.RevokedAt != nil {
-			delete(sc.sessions, sessionID)
+		if now.After(session.ExpiresAt) {
+			sc.deleteSession(sessionID)
 			deleted++
 		}
 	}
@@ -108,17 +128,19 @@ func (sc *SessionCache) CleanupExpired() int {
 	return deleted
 }
 
-// ClearCompanyID sets company_id to nil for all active sessions of a given user.
-// Called when a user's company is deleted so that renewed tokens reflect the change.
+// ClearCompanyID pone company_id a nil en todas las sesiones activas de un usuario.
+// PERF-05: usa el índice inverso userSessions para ser O(k) en lugar de O(N).
 func (sc *SessionCache) ClearCompanyID(userID string) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 
-	for sessionID, session := range sc.sessions {
-		if session.UserID == userID && session.RevokedAt == nil {
-			session.CompanyID = nil
-			sc.sessions[sessionID] = session
+	for _, sessionID := range sc.userSessions[userID] {
+		session, exists := sc.sessions[sessionID]
+		if !exists {
+			continue
 		}
+		session.CompanyID = nil
+		sc.sessions[sessionID] = session
 	}
 }
 

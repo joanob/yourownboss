@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-playground/validator/v10"
@@ -56,10 +57,18 @@ func (h *LoginHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Debug().Err(err).Str("username", req.Username).Msg("Login failed")
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(GenericResponse{
-			Error: ErrorResponse{Code: "INVALID_CREDENTIALS", Message: "Invalid username or password"},
-		})
+		// SEC-07: too_many_attempts devuelve 429, no 401
+		if strings.Contains(err.Error(), "too_many_attempts") {
+			w.WriteHeader(http.StatusTooManyRequests)
+			json.NewEncoder(w).Encode(GenericResponse{
+				Error: ErrorResponse{Code: "RATE_LIMIT_EXCEEDED", Message: "Too many failed login attempts, please try again later"},
+			})
+		} else {
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(GenericResponse{
+				Error: ErrorResponse{Code: "INVALID_CREDENTIALS", Message: "Invalid username or password"},
+			})
+		}
 		return
 	}
 
@@ -108,8 +117,6 @@ func (h *LoginHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(GenericResponse{
 		Data: LoginResponse{
 			User:             userDTO,
-			SessionToken:     loginResp.SessionToken,
-			RefreshToken:     loginResp.RefreshToken,
 			SessionExpiresAt: loginResp.ExpiresAt,
 		},
 	})

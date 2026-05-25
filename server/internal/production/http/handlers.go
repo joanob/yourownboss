@@ -141,7 +141,7 @@ func StartProductionHandler(svc *service.ProductionService, rateLimiter *cache.R
 			return
 		}
 
-		if !rateLimiter.Allow(userID, "production_start", productionRateLimit) {
+		if !rateLimiter.AllowAndRecord(userID, "production_start", productionRateLimit) {
 			log.Warn().Str("user_id", userID).Msg("Rate limit exceeded for production start")
 			respondError(w, http.StatusTooManyRequests, "RATE_LIMIT_EXCEEDED", "Too many requests, please slow down")
 			return
@@ -171,8 +171,6 @@ func StartProductionHandler(svc *service.ProductionService, rateLimiter *cache.R
 			handleProductionError(w, err)
 			return
 		}
-
-		rateLimiter.Record(userID, "production_start")
 
 		respondData(w, http.StatusOK, building)
 	}
