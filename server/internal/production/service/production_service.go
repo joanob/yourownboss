@@ -7,6 +7,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	auditRepo "github.com/joanob/yourownboss/internal/audit/repository"
 	companyModels "github.com/joanob/yourownboss/internal/company/models"
 	companyRepo "github.com/joanob/yourownboss/internal/company/repository"
 	"github.com/joanob/yourownboss/internal/pkg/cache"
@@ -29,18 +30,20 @@ var (
 type ProductionService struct {
 	companyRepo       companyRepo.CompanyRepositoryInterface
 	inventoryRepo     companyRepo.InventoryRepositoryInterface
-	buildingRepo      *productionRepo.CompanyBuildingRepository
-	productionRunRepo *productionRepo.ProductionRunRepository
+	buildingRepo      productionRepo.CompanyBuildingRepositoryInterface
+	productionRunRepo productionRepo.ProductionRunRepositoryInterface
 	gamedataCache     *cache.GamedataCache
+	auditRepo         auditRepo.AuditRepositoryInterface
 }
 
 // NewProductionService creates a new ProductionService
 func NewProductionService(
 	companyRepo companyRepo.CompanyRepositoryInterface,
 	inventoryRepo companyRepo.InventoryRepositoryInterface,
-	buildingRepo *productionRepo.CompanyBuildingRepository,
-	productionRunRepo *productionRepo.ProductionRunRepository,
+	buildingRepo productionRepo.CompanyBuildingRepositoryInterface,
+	productionRunRepo productionRepo.ProductionRunRepositoryInterface,
 	gamedataCache *cache.GamedataCache,
+	auditRepo auditRepo.AuditRepositoryInterface,
 ) *ProductionService {
 	return &ProductionService{
 		companyRepo:       companyRepo,
@@ -48,6 +51,7 @@ func NewProductionService(
 		buildingRepo:      buildingRepo,
 		productionRunRepo: productionRunRepo,
 		gamedataCache:     gamedataCache,
+		auditRepo:         auditRepo,
 	}
 }
 
@@ -110,6 +114,13 @@ func (s *ProductionService) BuildProductionBuilding(ctx context.Context, company
 	}
 
 	logger.Info().Str("building_id", building.ID).Time("ends_at", constructionEndsAt).Msg("Production building construction started")
+	if s.auditRepo != nil {
+		userID, _ := ctx.Value("user_id").(string)
+		_ = s.auditRepo.Log(ctx, userID, companyID, "BUILD_PRODUCTION_BUILDING", "building", building.ID, map[string]interface{}{
+			"master_id": productionBuildingMasterID,
+			"cost":      masterBuilding.ConstructionCost,
+		})
+	}
 	return building.ToDTO(), nil
 }
 
@@ -181,6 +192,14 @@ func (s *ProductionService) UpgradeBuilding(ctx context.Context, companyID, buil
 	building.ActiveRun = nil
 
 	logger.Info().Int64("new_level", newLevel).Time("ends_at", constructionEndsAt).Msg("Building upgrade started")
+	if s.auditRepo != nil {
+		userID, _ := ctx.Value("user_id").(string)
+		_ = s.auditRepo.Log(ctx, userID, companyID, "UPGRADE_PRODUCTION_BUILDING", "building", buildingID, map[string]interface{}{
+			"levels":    levels,
+			"new_level": newLevel,
+			"cost":      upgradeCost,
+		})
+	}
 	return building.ToDTO(), nil
 }
 
@@ -264,6 +283,14 @@ func (s *ProductionService) StartProduction(ctx context.Context, companyID, buil
 
 	building.ActiveRun = run
 	logger.Info().Str("run_id", run.ID).Time("ends_at", endsAt).Msg("Production started")
+	if s.auditRepo != nil {
+		userID, _ := ctx.Value("user_id").(string)
+		_ = s.auditRepo.Log(ctx, userID, companyID, "START_PRODUCTION", "building", buildingID, map[string]interface{}{
+			"run_id":     run.ID,
+			"process_id": processMasterID,
+			"cycles":     cycles,
+		})
+	}
 	return building.ToDTO(), nil
 }
 
@@ -320,6 +347,12 @@ func (s *ProductionService) CollectProduction(ctx context.Context, companyID, bu
 
 	building.ActiveRun = nil
 	logger.Info().Str("run_id", activeRun.ID).Msg("Production collected")
+	if s.auditRepo != nil {
+		userID, _ := ctx.Value("user_id").(string)
+		_ = s.auditRepo.Log(ctx, userID, companyID, "COLLECT_PRODUCTION", "building", buildingID, map[string]interface{}{
+			"run_id": activeRun.ID,
+		})
+	}
 	return building.ToDTO(), nil
 }
 

@@ -122,7 +122,7 @@ func TestBuyResource_Success(t *testing.T) {
 		},
 	}
 
-	svc := NewMarketService(companyRepo, inventoryRepo, gameCache)
+	svc := NewMarketService(companyRepo, inventoryRepo, gameCache, nil)
 
 	// water: MarketPrice=10, MarketSaleQty=5; buy 10 → totalCost = 10*(10/5) = 20
 	result, err := svc.BuyResource(context.Background(), "co-1", "water", 10)
@@ -140,7 +140,7 @@ func TestBuyResource_Success(t *testing.T) {
 func TestBuyResource_ResourceNotFound(t *testing.T) {
 	gameCache := newTestCache()
 
-	svc := NewMarketService(&mockCompanyRepo{}, &mockInventoryRepo{}, gameCache)
+	svc := NewMarketService(&mockCompanyRepo{}, &mockInventoryRepo{}, gameCache, nil)
 
 	_, err := svc.BuyResource(context.Background(), "co-1", "nonexistent", 5)
 	if !errors.Is(err, ErrResourceNotFound) {
@@ -151,7 +151,7 @@ func TestBuyResource_ResourceNotFound(t *testing.T) {
 func TestBuyResource_InvalidQuantityMultiple(t *testing.T) {
 	gameCache := newTestCache()
 
-	svc := NewMarketService(&mockCompanyRepo{}, &mockInventoryRepo{}, gameCache)
+	svc := NewMarketService(&mockCompanyRepo{}, &mockInventoryRepo{}, gameCache, nil)
 
 	// water has MarketSaleQty=5; 7 is not a multiple of 5
 	_, err := svc.BuyResource(context.Background(), "co-1", "water", 7)
@@ -173,7 +173,7 @@ func TestBuyResource_InsufficientFunds(t *testing.T) {
 		},
 	}
 
-	svc := NewMarketService(companyRepo, &mockInventoryRepo{}, gameCache)
+	svc := NewMarketService(companyRepo, &mockInventoryRepo{}, gameCache, nil)
 
 	_, err := svc.BuyResource(context.Background(), "co-1", "water", 10)
 	if !errors.Is(err, companyModels.ErrInsufficientFunds) {
@@ -218,7 +218,7 @@ func TestSellResource_Success(t *testing.T) {
 		},
 	}
 
-	svc := NewMarketService(companyRepo, inventoryRepo, gameCache)
+	svc := NewMarketService(companyRepo, inventoryRepo, gameCache, nil)
 
 	// water: MarketPrice=10, MarketSaleQty=5; sell 10 → revenue = 10*(10/5) = 20
 	result, err := svc.SellResource(context.Background(), "co-1", "water", 10)
@@ -236,7 +236,7 @@ func TestSellResource_Success(t *testing.T) {
 func TestSellResource_ResourceNotFound(t *testing.T) {
 	gameCache := newTestCache()
 
-	svc := NewMarketService(&mockCompanyRepo{}, &mockInventoryRepo{}, gameCache)
+	svc := NewMarketService(&mockCompanyRepo{}, &mockInventoryRepo{}, gameCache, nil)
 
 	_, err := svc.SellResource(context.Background(), "co-1", "nonexistent", 5)
 	if !errors.Is(err, ErrResourceNotFound) {
@@ -247,7 +247,7 @@ func TestSellResource_ResourceNotFound(t *testing.T) {
 func TestSellResource_InvalidQuantityMultiple(t *testing.T) {
 	gameCache := newTestCache()
 
-	svc := NewMarketService(&mockCompanyRepo{}, &mockInventoryRepo{}, gameCache)
+	svc := NewMarketService(&mockCompanyRepo{}, &mockInventoryRepo{}, gameCache, nil)
 
 	// water has MarketSaleQty=5; 3 is not a multiple of 5
 	_, err := svc.SellResource(context.Background(), "co-1", "water", 3)
@@ -271,7 +271,7 @@ func TestSellResource_InsufficientInventory(t *testing.T) {
 		},
 	}
 
-	svc := NewMarketService(&mockCompanyRepo{}, inventoryRepo, gameCache)
+	svc := NewMarketService(&mockCompanyRepo{}, inventoryRepo, gameCache, nil)
 
 	_, err := svc.SellResource(context.Background(), "co-1", "water", 10)
 	if !errors.Is(err, companyModels.ErrInsufficientInventory) {
@@ -288,7 +288,7 @@ func TestSellResource_NoInventoryItem(t *testing.T) {
 		},
 	}
 
-	svc := NewMarketService(&mockCompanyRepo{}, inventoryRepo, gameCache)
+	svc := NewMarketService(&mockCompanyRepo{}, inventoryRepo, gameCache, nil)
 
 	_, err := svc.SellResource(context.Background(), "co-1", "water", 5)
 	if !errors.Is(err, companyModels.ErrInsufficientInventory) {

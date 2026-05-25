@@ -7,6 +7,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	auditRepository "github.com/joanob/yourownboss/internal/audit/repository"
 	companyModels "github.com/joanob/yourownboss/internal/company/models"
 	companyRepo "github.com/joanob/yourownboss/internal/company/repository"
 	"github.com/joanob/yourownboss/internal/pkg/cache"
@@ -29,18 +30,20 @@ var (
 type SaleService struct {
 	companyRepo   companyRepo.CompanyRepositoryInterface
 	inventoryRepo companyRepo.InventoryRepositoryInterface
-	buildingRepo  *saleRepo.CompanySaleBuildingRepository
-	saleRunRepo   *saleRepo.SaleRunRepository
+	buildingRepo  saleRepo.CompanySaleBuildingRepositoryInterface
+	saleRunRepo   saleRepo.SaleRunRepositoryInterface
 	gamedataCache *cache.GamedataCache
+	auditRepo     auditRepository.AuditRepositoryInterface
 }
 
 // NewSaleService creates a new SaleService
 func NewSaleService(
 	companyRepo companyRepo.CompanyRepositoryInterface,
 	inventoryRepo companyRepo.InventoryRepositoryInterface,
-	buildingRepo *saleRepo.CompanySaleBuildingRepository,
-	saleRunRepo *saleRepo.SaleRunRepository,
+	buildingRepo saleRepo.CompanySaleBuildingRepositoryInterface,
+	saleRunRepo saleRepo.SaleRunRepositoryInterface,
 	gamedataCache *cache.GamedataCache,
+	auditRepo auditRepository.AuditRepositoryInterface,
 ) *SaleService {
 	return &SaleService{
 		companyRepo:   companyRepo,
@@ -48,6 +51,7 @@ func NewSaleService(
 		buildingRepo:  buildingRepo,
 		saleRunRepo:   saleRunRepo,
 		gamedataCache: gamedataCache,
+		auditRepo:     auditRepo,
 	}
 }
 
@@ -110,6 +114,13 @@ func (s *SaleService) BuildSaleBuilding(ctx context.Context, companyID, saleBuil
 	}
 
 	logger.Info().Str("building_id", building.ID).Time("ends_at", constructionEndsAt).Msg("Sale building construction started")
+	if s.auditRepo != nil {
+		userID, _ := ctx.Value("user_id").(string)
+		_ = s.auditRepo.Log(ctx, userID, companyID, "BUILD_SALE_BUILDING", "building", building.ID, map[string]interface{}{
+			"master_id": saleBuildingMasterID,
+			"cost":      masterBuilding.ConstructionCost,
+		})
+	}
 	return building.ToDTO(), nil
 }
 
@@ -181,6 +192,14 @@ func (s *SaleService) UpgradeBuilding(ctx context.Context, companyID, buildingID
 	building.ActiveRun = nil
 
 	logger.Info().Int64("new_level", newLevel).Time("ends_at", constructionEndsAt).Msg("Sale building upgrade started")
+	if s.auditRepo != nil {
+		userID, _ := ctx.Value("user_id").(string)
+		_ = s.auditRepo.Log(ctx, userID, companyID, "UPGRADE_SALE_BUILDING", "building", buildingID, map[string]interface{}{
+			"levels":    levels,
+			"new_level": newLevel,
+			"cost":      upgradeCost,
+		})
+	}
 	return building.ToDTO(), nil
 }
 
@@ -261,6 +280,14 @@ func (s *SaleService) StartSale(ctx context.Context, companyID, buildingID, reso
 
 	building.ActiveRun = run
 	logger.Info().Str("run_id", run.ID).Time("ends_at", endsAt).Msg("Sale started")
+	if s.auditRepo != nil {
+		userID, _ := ctx.Value("user_id").(string)
+		_ = s.auditRepo.Log(ctx, userID, companyID, "START_SALE", "building", buildingID, map[string]interface{}{
+			"run_id":      run.ID,
+			"resource_id": resourceID,
+			"units":       units,
+		})
+	}
 	return building.ToDTO(), nil
 }
 
@@ -327,6 +354,13 @@ func (s *SaleService) CollectSale(ctx context.Context, companyID, buildingID str
 
 	building.ActiveRun = nil
 	logger.Info().Int64("revenue", revenue).Msg("Sale collected")
+	if s.auditRepo != nil {
+		userID, _ := ctx.Value("user_id").(string)
+		_ = s.auditRepo.Log(ctx, userID, companyID, "COLLECT_SALE", "building", buildingID, map[string]interface{}{
+			"run_id":  activeRun.ID,
+			"revenue": revenue,
+		})
+	}
 	return building.ToDTO(), nil
 }
 

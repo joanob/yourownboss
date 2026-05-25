@@ -17,6 +17,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog"
 
+	auditrepo "github.com/joanob/yourownboss/internal/audit/repository"
 	authcrypto "github.com/joanob/yourownboss/internal/auth/crypto"
 	authhttphandlers "github.com/joanob/yourownboss/internal/auth/http"
 	authrepo "github.com/joanob/yourownboss/internal/auth/repository"
@@ -174,6 +175,9 @@ func main() {
 	companySaleBuildingRepository := salerepo.NewCompanySaleBuildingRepository(queries)
 	saleRunRepository := salerepo.NewSaleRunRepository(queries)
 
+	// Audit repository (Phase 7)
+	auditRepository := auditrepo.NewAuditRepository(queries)
+
 	// Crear Services
 	userService := usersvc.NewUserService(userRepository, passwordManager)
 	authService := authsvc.NewAuthService(userRepository, sessionRepository, passwordManager, jwtManager, sessionCache)
@@ -181,7 +185,7 @@ func main() {
 	inventoryService := companysvc.NewInventoryService(inventoryRepository, companyRepository)
 
 	// Market service (Phase 4)
-	marketService := marketsvc.NewMarketService(companyRepository, inventoryRepository, gamedataCache)
+	marketService := marketsvc.NewMarketService(companyRepository, inventoryRepository, gamedataCache, auditRepository)
 
 	// Production service (Phase 5)
 	productionService := productionsvc.NewProductionService(
@@ -190,6 +194,7 @@ func main() {
 		companyBuildingRepository,
 		productionRunRepository,
 		gamedataCache,
+		auditRepository,
 	)
 
 	// Sale service (Phase 6)
@@ -199,6 +204,7 @@ func main() {
 		companySaleBuildingRepository,
 		saleRunRepository,
 		gamedataCache,
+		auditRepository,
 	)
 
 	// Gamedata service (Phase 3)
@@ -268,8 +274,8 @@ func main() {
 	r.Use(middleware.Timeout(30 * time.Second))
 
 	// Rutas de salud
-	r.Get("/api/v1/status", healthHandler)
-	r.Get("/health", healthHandler)
+	r.Get("/api/v1/status", makeHealthHandler(dbConn))
+	r.Get("/health", makeHealthHandler(dbConn))
 
 	// Placeholder para root
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
@@ -328,22 +334,27 @@ func generateRandomSecret(length int) string {
 	return base64.URLEncoding.EncodeToString(bytes)[:length]
 }
 
-// healthHandler devuelve el estado del servidor
-func healthHandler(w http.ResponseWriter, r *http.Request) {
-	appVersion := os.Getenv("APP_VERSION")
-	if appVersion == "" {
-		appVersion = "0.1.0"
-	}
+// makeHealthHandler returns a handler that includes db connectivity in the status response
+func makeHealthHandler(dbConn interface{ Ping() error }) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		appVersion := os.Getenv("APP_VERSION")
+		if appVersion == "" {
+			appVersion = "0.1.0"
+		}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"data": map[string]interface{}{
-			"status":    "ok",
-			"version":   appVersion,
-			"timestamp": time.Now().UTC(),
-		},
-	})
+		dbConnected := dbConn.Ping() == nil
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{
+				"status":       "ok",
+				"version":      appVersion,
+				"timestamp":    time.Now().UTC(),
+				"db_connected": dbConnected,
+			},
+		})
+	}
 }
 
 // corsMiddleware agrega headers CORS

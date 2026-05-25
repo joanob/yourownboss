@@ -6,6 +6,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	auditRepository "github.com/joanob/yourownboss/internal/audit/repository"
 	companyModels "github.com/joanob/yourownboss/internal/company/models"
 	companyrepository "github.com/joanob/yourownboss/internal/company/repository"
 	"github.com/joanob/yourownboss/internal/pkg/cache"
@@ -27,6 +28,7 @@ type MarketService struct {
 	companyRepo   companyrepository.CompanyRepositoryInterface
 	inventoryRepo companyrepository.InventoryRepositoryInterface
 	gamedataCache *cache.GamedataCache
+	auditRepo     auditRepository.AuditRepositoryInterface
 }
 
 // NewMarketService creates a new MarketService
@@ -34,11 +36,13 @@ func NewMarketService(
 	companyRepo companyrepository.CompanyRepositoryInterface,
 	inventoryRepo companyrepository.InventoryRepositoryInterface,
 	gamedataCache *cache.GamedataCache,
+	auditRepo auditRepository.AuditRepositoryInterface,
 ) *MarketService {
 	return &MarketService{
 		companyRepo:   companyRepo,
 		inventoryRepo: inventoryRepo,
 		gamedataCache: gamedataCache,
+		auditRepo:     auditRepo,
 	}
 }
 
@@ -117,6 +121,15 @@ func (s *MarketService) BuyResource(ctx context.Context, companyID, resourceMast
 		Int64("total_cost", totalCost).
 		Int64("new_money", updatedCompany.Money).
 		Msg("Resource purchased successfully")
+
+	if s.auditRepo != nil {
+		userID, _ := ctx.Value("user_id").(string)
+		_ = s.auditRepo.Log(ctx, userID, companyID, "BUY_RESOURCE", "resource", resourceMasterID, map[string]interface{}{
+			"quantity":    quantity,
+			"total_cost":  totalCost,
+			"after_money": updatedCompany.Money,
+		})
+	}
 
 	return &MarketTransactionResult{
 		Company:   updatedCompany,
@@ -207,6 +220,15 @@ func (s *MarketService) SellResource(ctx context.Context, companyID, resourceMas
 		Int64("revenue", revenue).
 		Int64("new_money", updatedCompany.Money).
 		Msg("Resource sold successfully")
+
+	if s.auditRepo != nil {
+		userID, _ := ctx.Value("user_id").(string)
+		_ = s.auditRepo.Log(ctx, userID, companyID, "SELL_RESOURCE", "resource", resourceMasterID, map[string]interface{}{
+			"quantity":    quantity,
+			"revenue":     revenue,
+			"after_money": updatedCompany.Money,
+		})
+	}
 
 	return &MarketTransactionResult{
 		Company:   updatedCompany,
