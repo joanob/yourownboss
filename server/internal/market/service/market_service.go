@@ -2,13 +2,16 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 
+	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 
 	auditRepository "github.com/joanob/yourownboss/internal/audit/repository"
 	companyModels "github.com/joanob/yourownboss/internal/company/models"
 	companyrepository "github.com/joanob/yourownboss/internal/company/repository"
+	"github.com/joanob/yourownboss/internal/db/dbqueries"
 	"github.com/joanob/yourownboss/internal/pkg/cache"
 )
 
@@ -29,6 +32,14 @@ type MarketService struct {
 	inventoryRepo companyrepository.InventoryRepositoryInterface
 	gamedataCache *cache.GamedataCache
 	auditRepo     auditRepository.AuditRepositoryInterface
+	db            *sql.DB
+	queries       *dbqueries.Queries
+}
+
+// SetDB provides optional transaction support (call from main, not required in tests)
+func (s *MarketService) SetDB(db *sql.DB, queries *dbqueries.Queries) {
+	s.db = db
+	s.queries = queries
 }
 
 // NewMarketService creates a new MarketService
@@ -96,17 +107,48 @@ func (s *MarketService) BuyResource(ctx context.Context, companyID, resourceMast
 		return nil, companyModels.ErrInsufficientFunds
 	}
 
-	// Deduct money
+	// Deduct money and add inventory atomically
 	newMoney := company.Money - totalCost
-	updatedCompany, err := s.companyRepo.UpdateCompanyMoney(ctx, companyID, newMoney)
-	if err != nil {
-		logger.Error().Err(err).Msg("Failed to update company money")
-		return nil, err
+	if s.db != nil && s.queries != nil {
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			logger.Error().Err(err).Msg("Failed to begin transaction")
+			return nil, err
+		}
+		defer tx.Rollback()
+		txq := s.queries.WithTx(tx)
+
+		if _, err := txq.UpdateCompanyMoney(ctx, dbqueries.UpdateCompanyMoneyParams{Money: newMoney, ID: companyID}); err != nil {
+			logger.Error().Err(err).Msg("Failed to update company money in transaction")
+			return nil, err
+		}
+		itemID := uuid.New().String()
+		if _, err := txq.AddToInventory(ctx, dbqueries.AddToInventoryParams{ID: itemID, CompanyID: companyID, ResourceID: resource.ID, Quantity: quantity}); err != nil {
+			logger.Error().Err(err).Msg("Failed to add to inventory in transaction")
+			return nil, err
+		}
+		if err := tx.Commit(); err != nil {
+			logger.Error().Err(err).Msg("Failed to commit buy transaction")
+			return nil, err
+		}
+	} else {
+		// Fallback (no db configured — used in tests with mock repos)
+		if _, err := s.companyRepo.UpdateCompanyMoney(ctx, companyID, newMoney); err != nil {
+			logger.Error().Err(err).Msg("Failed to update company money")
+			return nil, err
+		}
+		if _, err := s.inventoryRepo.AddToInventory(ctx, companyID, resource.ID, quantity); err != nil {
+			logger.Error().Err(err).Msg("Failed to add resource to inventory")
+			return nil, err
+		}
 	}
 
-	// Add to inventory
-	if _, err = s.inventoryRepo.AddToInventory(ctx, companyID, resource.ID, quantity); err != nil {
-		logger.Error().Err(err).Msg("Failed to add resource to inventory")
+	updatedCompany, err := s.companyRepo.GetCompanyByID(ctx, companyID)
+	if err != nil || updatedCompany == nil {
+		logger.Error().Err(err).Msg("Failed to reload company after purchase")
+		if err == nil {
+			err = companyModels.ErrCompanyNotFound
+		}
 		return nil, err
 	}
 
@@ -124,11 +166,13 @@ func (s *MarketService) BuyResource(ctx context.Context, companyID, resourceMast
 
 	if s.auditRepo != nil {
 		userID, _ := ctx.Value("user_id").(string)
-		_ = s.auditRepo.Log(ctx, userID, companyID, "BUY_RESOURCE", "resource", resourceMasterID, map[string]interface{}{
+		if err := s.auditRepo.Log(ctx, userID, companyID, "BUY_RESOURCE", "resource", resourceMasterID, map[string]interface{}{
 			"quantity":    quantity,
 			"total_cost":  totalCost,
 			"after_money": updatedCompany.Money,
-		})
+		}); err != nil {
+			log.Error().Err(err).Msg("Audit log failed: BUY_RESOURCE")
+		}
 	}
 
 	return &MarketTransactionResult{
@@ -186,13 +230,7 @@ func (s *MarketService) SellResource(ctx context.Context, companyID, resourceMas
 
 	revenue := resource.MarketPrice * (quantity / resource.MarketSaleQty)
 
-	// Remove from inventory
-	if _, err = s.inventoryRepo.RemoveFromInventory(ctx, companyID, resource.ID, quantity); err != nil {
-		logger.Error().Err(err).Msg("Failed to remove resource from inventory")
-		return nil, err
-	}
-
-	// Add revenue to company
+	// Get company to compute new money
 	company, err := s.companyRepo.GetCompanyByID(ctx, companyID)
 	if err != nil {
 		logger.Error().Err(err).Msg("Failed to get company")
@@ -202,10 +240,48 @@ func (s *MarketService) SellResource(ctx context.Context, companyID, resourceMas
 		return nil, companyModels.ErrCompanyNotFound
 	}
 
+	// Remove inventory and add revenue atomically
 	newMoney := company.Money + revenue
-	updatedCompany, err := s.companyRepo.UpdateCompanyMoney(ctx, companyID, newMoney)
-	if err != nil {
-		logger.Error().Err(err).Msg("Failed to update company money")
+	newQty := available - quantity
+	if s.db != nil && s.queries != nil {
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			logger.Error().Err(err).Msg("Failed to begin transaction")
+			return nil, err
+		}
+		defer tx.Rollback()
+		txq := s.queries.WithTx(tx)
+
+		if _, err := txq.RemoveFromInventory(ctx, dbqueries.RemoveFromInventoryParams{Quantity: newQty, CompanyID: companyID, ResourceID: resource.ID}); err != nil {
+			logger.Error().Err(err).Msg("Failed to remove inventory in transaction")
+			return nil, err
+		}
+		if _, err := txq.UpdateCompanyMoney(ctx, dbqueries.UpdateCompanyMoneyParams{Money: newMoney, ID: companyID}); err != nil {
+			logger.Error().Err(err).Msg("Failed to update company money in transaction")
+			return nil, err
+		}
+		if err := tx.Commit(); err != nil {
+			logger.Error().Err(err).Msg("Failed to commit sell transaction")
+			return nil, err
+		}
+	} else {
+		// Fallback (no db configured — used in tests with mock repos)
+		if _, err := s.inventoryRepo.RemoveFromInventory(ctx, companyID, resource.ID, quantity); err != nil {
+			logger.Error().Err(err).Msg("Failed to remove resource from inventory")
+			return nil, err
+		}
+		if _, err := s.companyRepo.UpdateCompanyMoney(ctx, companyID, newMoney); err != nil {
+			logger.Error().Err(err).Msg("Failed to update company money")
+			return nil, err
+		}
+	}
+
+	updatedCompany, err := s.companyRepo.GetCompanyByID(ctx, companyID)
+	if err != nil || updatedCompany == nil {
+		logger.Error().Err(err).Msg("Failed to reload company after sale")
+		if err == nil {
+			err = companyModels.ErrCompanyNotFound
+		}
 		return nil, err
 	}
 
@@ -223,11 +299,13 @@ func (s *MarketService) SellResource(ctx context.Context, companyID, resourceMas
 
 	if s.auditRepo != nil {
 		userID, _ := ctx.Value("user_id").(string)
-		_ = s.auditRepo.Log(ctx, userID, companyID, "SELL_RESOURCE", "resource", resourceMasterID, map[string]interface{}{
+		if err := s.auditRepo.Log(ctx, userID, companyID, "SELL_RESOURCE", "resource", resourceMasterID, map[string]interface{}{
 			"quantity":    quantity,
 			"revenue":     revenue,
 			"after_money": updatedCompany.Money,
-		})
+		}); err != nil {
+			log.Error().Err(err).Msg("Audit log failed: SELL_RESOURCE")
+		}
 	}
 
 	return &MarketTransactionResult{

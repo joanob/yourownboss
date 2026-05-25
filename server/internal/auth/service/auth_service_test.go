@@ -301,6 +301,10 @@ func (m *mockLoginAttemptRepository) RecordFailure(_ context.Context, _, _ strin
 	return nil
 }
 
+func (m *mockLoginAttemptRepository) DeleteOldAttempts(_ context.Context) error {
+	return nil
+}
+
 // ============================================================================
 // Tests
 // ============================================================================

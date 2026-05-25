@@ -16,6 +16,7 @@ import (
 type ProductionRunRepositoryInterface interface {
 	CreateProductionRun(ctx context.Context, companyBuildingID, processID string, cycles int64, startedAt, endsAt time.Time) (*models.ProductionRun, error)
 	GetActiveRunByBuildingID(ctx context.Context, buildingID string) (*models.ProductionRun, error)
+	GetActiveRunsByBuildingIDs(ctx context.Context, buildingIDs []string) ([]*models.ProductionRun, error)
 	GetProductionRunByID(ctx context.Context, runID string) (*models.ProductionRun, error)
 	MarkRunCollected(ctx context.Context, runID string) error
 }
@@ -69,6 +70,20 @@ func (r *ProductionRunRepository) GetActiveRunByBuildingID(ctx context.Context, 
 		return nil, err
 	}
 	return models.FromDBProductionRun(&dbo), nil
+}
+
+// GetActiveRunsByBuildingIDs returns all active (uncollected) runs for the given buildings in one query.
+func (r *ProductionRunRepository) GetActiveRunsByBuildingIDs(ctx context.Context, buildingIDs []string) ([]*models.ProductionRun, error) {
+	dbos, err := r.queries.GetActiveProductionRunsByBuildingIDs(ctx, buildingIDs)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to get active production runs by building IDs")
+		return nil, err
+	}
+	runs := make([]*models.ProductionRun, 0, len(dbos))
+	for i := range dbos {
+		runs = append(runs, models.FromDBProductionRun(&dbos[i]))
+	}
+	return runs, nil
 }
 
 // GetProductionRunByID retrieves a production run by its ID

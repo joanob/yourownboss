@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"context"
 	"sync"
 	"time"
 )
@@ -85,13 +86,19 @@ func (rl *RateLimiter) Record(userID, action string) {
 // StartCleanup starts a background goroutine that periodically removes entries
 // for users who have stopped making requests, preventing unbounded memory growth.
 // SEC-05: without this, idle user entries accumulate forever.
+// The goroutine stops when ctx is cancelled (pass the application root context).
 // Call once after NewRateLimiter(). A cleanup interval of 5 minutes is recommended.
-func (rl *RateLimiter) StartCleanup(interval time.Duration) {
+func (rl *RateLimiter) StartCleanup(ctx context.Context, interval time.Duration) {
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
-		for range ticker.C {
-			rl.cleanup()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				rl.cleanup()
+			}
 		}
 	}()
 }

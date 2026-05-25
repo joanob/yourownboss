@@ -2,7 +2,11 @@ package crypto
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"golang.org/x/crypto/argon2"
 )
@@ -78,14 +82,14 @@ func (pm *PasswordManager) VerifyPassword(password, hash string) bool {
 
 // encodeArgon2 codifica salt y hash en formato PHC
 func encodeArgon2(salt, hash []byte, time, memory uint32, threads uint8) string {
-	// Formato: $argon2id$v=19$m=<memory>,t=<time>,p=<threads>$<base64-salt>$<base64-hash>
+	// Formato: $argon2id$v=19$m=<memory>,t=<time>,p=<threads>$<hex-salt>$<hex-hash>
 	return fmt.Sprintf(
 		"$argon2id$v=19$m=%d,t=%d,p=%d$%s$%s",
 		memory,
 		time,
 		threads,
-		encodeBase64(salt),
-		encodeBase64(hash),
+		encodePasswordBytes(salt),
+		encodePasswordBytes(hash),
 	)
 }
 
@@ -99,27 +103,41 @@ type argon2Params struct {
 // decodeArgon2 decodifica un hash en formato PHC
 func decodeArgon2(hash string) ([]byte, []byte, argon2Params, error) {
 	var params argon2Params
-	var saltStr, hashStr string
 
-	// Parse: $argon2id$v=19$m=<memory>,t=<time>,p=<threads>$<base64-salt>$<base64-hash>
-	_, err := fmt.Sscanf(hash, "$argon2id$v=19$m=%d,t=%d,p=%d$%[4]s$%[5]s",
-		&params.memory, &params.time, &params.threads, &saltStr, &hashStr)
-	if err != nil {
-		// Intenta parsear con diferentes separadores
-		_, err = fmt.Sscanf(hash, "$argon2id$v=19$m=%d,t=%d,p=%d$%s$%s",
-			&params.memory, &params.time, &params.threads, &saltStr, &hashStr)
+	// Formato: $argon2id$v=19$m=<memory>,t=<time>,p=<threads>$<hex-salt>$<hex-hash>
+	// Split produce: ["", "argon2id", "v=19", "m=...,t=...,p=...", "<salt>", "<hash>"]
+	parts := strings.Split(hash, "$")
+	if len(parts) != 6 || parts[1] != "argon2id" {
+		return nil, nil, params, fmt.Errorf("formato de hash inválido")
+	}
+
+	// Parsear parámetros: "m=65536,t=3,p=4"
+	for _, kv := range strings.Split(parts[3], ",") {
+		pair := strings.SplitN(kv, "=", 2)
+		if len(pair) != 2 {
+			return nil, nil, params, fmt.Errorf("parámetro de hash malformado: %s", kv)
+		}
+		val, err := strconv.ParseUint(pair[1], 10, 64)
 		if err != nil {
-			return nil, nil, params, fmt.Errorf("error parseando hash: %w", err)
+			return nil, nil, params, fmt.Errorf("valor de parámetro inválido %s: %w", kv, err)
+		}
+		switch pair[0] {
+		case "m":
+			params.memory = uint32(val)
+		case "t":
+			params.time = uint32(val)
+		case "p":
+			params.threads = uint8(val)
 		}
 	}
 
-	// Decodificar salt y hash desde base64
-	salt, err := decodeBase64(saltStr)
+	// Decodificar salt y hash desde hex
+	salt, err := hex.DecodeString(parts[4])
 	if err != nil {
 		return nil, nil, params, fmt.Errorf("error decodificando salt: %w", err)
 	}
 
-	hashBytes, err := decodeBase64(hashStr)
+	hashBytes, err := hex.DecodeString(parts[5])
 	if err != nil {
 		return nil, nil, params, fmt.Errorf("error decodificando hash: %w", err)
 	}
@@ -127,40 +145,13 @@ func decodeArgon2(hash string) ([]byte, []byte, argon2Params, error) {
 	return salt, hashBytes, params, nil
 }
 
-// encodeBase64 codifica bytes a base64 sin padding
-func encodeBase64(data []byte) string {
-	return fmt.Sprintf("%x", data)
-}
-
-// decodeBase64 decodifica hex a bytes
-func decodeBase64(s string) ([]byte, error) {
-	// Usar hex en lugar de base64 para mayor compatibilidad
-	var result []byte
-	_, err := fmt.Sscanf(s, "%x", &result)
-	if err != nil {
-		// Intentar con raw string si sscanf falla
-		// En realidad usar hex.DecodeString es más seguro
-		for i := 0; i < len(s); i += 2 {
-			var b byte
-			_, err := fmt.Sscanf(s[i:i+2], "%02x", &b)
-			if err != nil {
-				return nil, err
-			}
-			result = append(result, b)
-		}
-	}
-	return result, nil
+// encodePasswordBytes codifica bytes a hex
+func encodePasswordBytes(data []byte) string {
+	return hex.EncodeToString(data)
 }
 
 // constantTimeCompare compara dos slices de bytes en tiempo constante
 // Previene timing attacks
 func constantTimeCompare(a, b []byte) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	var result byte
-	for i := 0; i < len(a); i++ {
-		result |= a[i] ^ b[i]
-	}
-	return result == 0
+	return subtle.ConstantTimeCompare(a, b) == 1
 }

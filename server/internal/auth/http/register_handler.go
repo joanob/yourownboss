@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/joanob/yourownboss/internal/pkg/cache"
 	"github.com/joanob/yourownboss/internal/users/service"
 	"github.com/rs/zerolog/log"
 )
@@ -13,19 +14,35 @@ import (
 type RegisterHandler struct {
 	userService service.UserService
 	validator   *validator.Validate
+	rateLimiter *cache.RateLimiter
 }
 
 // NewRegisterHandler creates a new register handler.
-func NewRegisterHandler(userService service.UserService, validator *validator.Validate) *RegisterHandler {
+func NewRegisterHandler(userService service.UserService, validator *validator.Validate, rateLimiter *cache.RateLimiter) *RegisterHandler {
 	return &RegisterHandler{
 		userService: userService,
 		validator:   validator,
+		rateLimiter: rateLimiter,
 	}
 }
 
 // Handle processes user registration requests.
 func (h *RegisterHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
+	// Rate limit by IP: max 5 registrations per minute per IP (C-03)
+	clientIP := r.RemoteAddr
+	if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
+		clientIP = realIP
+	}
+	if !h.rateLimiter.AllowAndRecord(clientIP, "register", 5) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
+		json.NewEncoder(w).Encode(GenericResponse{
+			Error: ErrorResponse{Code: "RATE_LIMIT_EXCEEDED", Message: "Too many registration attempts, please try again later"},
+		})
+		return
+	}
 
 	// Parse request
 	var req RegisterRequest

@@ -25,3 +25,8 @@ func (r *loginAttemptRepository) CountRecentFailed(ctx context.Context, username
 func (r *loginAttemptRepository) RecordFailure(ctx context.Context, id, username string) error {
 	return r.queries.InsertLoginAttempt(ctx, id, username)
 }
+
+// DeleteOldAttempts removes login_attempt records older than 7 days.
+func (r *loginAttemptRepository) DeleteOldAttempts(ctx context.Context) error {
+	return r.queries.DeleteOldLoginAttempts(ctx)
+}

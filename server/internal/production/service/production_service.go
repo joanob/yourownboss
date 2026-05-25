@@ -2,14 +2,17 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 
 	auditRepo "github.com/joanob/yourownboss/internal/audit/repository"
 	companyModels "github.com/joanob/yourownboss/internal/company/models"
 	companyRepo "github.com/joanob/yourownboss/internal/company/repository"
+	"github.com/joanob/yourownboss/internal/db/dbqueries"
 	"github.com/joanob/yourownboss/internal/pkg/cache"
 	productionModels "github.com/joanob/yourownboss/internal/production/models"
 	productionRepo "github.com/joanob/yourownboss/internal/production/repository"
@@ -34,6 +37,14 @@ type ProductionService struct {
 	productionRunRepo productionRepo.ProductionRunRepositoryInterface
 	gamedataCache     *cache.GamedataCache
 	auditRepo         auditRepo.AuditRepositoryInterface
+	db                *sql.DB
+	queries           *dbqueries.Queries
+}
+
+// SetDB provides optional transaction support (call from main, not required in tests)
+func (s *ProductionService) SetDB(db *sql.DB, queries *dbqueries.Queries) {
+	s.db = db
+	s.queries = queries
 }
 
 // NewProductionService creates a new ProductionService
@@ -62,13 +73,27 @@ func (s *ProductionService) GetBuildings(ctx context.Context, companyID string) 
 		return nil, err
 	}
 
+	if len(buildings) == 0 {
+		return []*productionModels.CompanyProductionBuildingDTO{}, nil
+	}
+
+	// C-02: single batch query instead of N+1 per-building queries
+	buildingIDs := make([]string, len(buildings))
+	for i, b := range buildings {
+		buildingIDs[i] = b.ID
+	}
+	activeRuns, err := s.productionRunRepo.GetActiveRunsByBuildingIDs(ctx, buildingIDs)
+	if err != nil {
+		return nil, err
+	}
+	runsMap := make(map[string]*productionModels.ProductionRun, len(activeRuns))
+	for _, r := range activeRuns {
+		runsMap[r.CompanyBuildingID] = r
+	}
+
 	dtos := make([]*productionModels.CompanyProductionBuildingDTO, 0, len(buildings))
 	for _, b := range buildings {
-		activeRun, err := s.productionRunRepo.GetActiveRunByBuildingID(ctx, b.ID)
-		if err != nil {
-			return nil, err
-		}
-		b.ActiveRun = activeRun
+		b.ActiveRun = runsMap[b.ID]
 		dtos = append(dtos, b.ToDTO())
 	}
 
@@ -97,29 +122,69 @@ func (s *ProductionService) BuildProductionBuilding(ctx context.Context, company
 		return nil, companyModels.ErrInsufficientFunds
 	}
 
-	// Deduct money
-	if err := company.RemoveMoney(masterBuilding.ConstructionCost); err != nil {
-		return nil, err
-	}
-	if _, err := s.companyRepo.UpdateCompanyMoney(ctx, companyID, company.Money); err != nil {
-		return nil, err
+	// Deduct money and create building atomically
+	newMoney := company.Money - masterBuilding.ConstructionCost
+	constructionEndsAt := time.Now().UTC().Add(time.Duration(masterBuilding.ConstructionTimeS) * time.Second)
+
+	var buildingID string
+	if s.db != nil && s.queries != nil {
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return nil, err
+		}
+		defer tx.Rollback()
+		txq := s.queries.WithTx(tx)
+
+		if _, err := txq.UpdateCompanyMoney(ctx, dbqueries.UpdateCompanyMoneyParams{Money: newMoney, ID: companyID}); err != nil {
+			return nil, err
+		}
+		buildingID = uuid.New().String()
+		if err := txq.CreateCompanyProductionBuilding(ctx, dbqueries.CreateCompanyProductionBuildingParams{
+			ID:                   buildingID,
+			CompanyID:            companyID,
+			ProductionBuildingID: masterBuilding.ID,
+			Level:                1,
+			ConstructionEndsAt:   &constructionEndsAt,
+			CreatedAt:            time.Now().UTC(),
+		}); err != nil {
+			return nil, err
+		}
+		if err := tx.Commit(); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := company.RemoveMoney(masterBuilding.ConstructionCost); err != nil {
+			return nil, err
+		}
+		if _, err := s.companyRepo.UpdateCompanyMoney(ctx, companyID, company.Money); err != nil {
+			return nil, err
+		}
 	}
 
-	// Create the building record
-	constructionEndsAt := time.Now().UTC().Add(time.Duration(masterBuilding.ConstructionTimeS) * time.Second)
-	building, err := s.buildingRepo.CreateCompanyProductionBuilding(ctx, companyID, masterBuilding.ID, constructionEndsAt)
-	if err != nil {
-		logger.Error().Err(err).Msg("Failed to create company production building")
-		return nil, err
+	var building *productionModels.CompanyProductionBuilding
+	if s.db != nil && s.queries != nil {
+		building, err = s.buildingRepo.GetCompanyProductionBuildingByID(ctx, buildingID)
+		if err != nil {
+			logger.Error().Err(err).Msg("Failed to fetch created building")
+			return nil, err
+		}
+	} else {
+		building, err = s.buildingRepo.CreateCompanyProductionBuilding(ctx, companyID, masterBuilding.ID, constructionEndsAt)
+		if err != nil {
+			logger.Error().Err(err).Msg("Failed to create company production building")
+			return nil, err
+		}
 	}
 
 	logger.Info().Str("building_id", building.ID).Time("ends_at", constructionEndsAt).Msg("Production building construction started")
 	if s.auditRepo != nil {
 		userID, _ := ctx.Value("user_id").(string)
-		_ = s.auditRepo.Log(ctx, userID, companyID, "BUILD_PRODUCTION_BUILDING", "building", building.ID, map[string]interface{}{
+		if err := s.auditRepo.Log(ctx, userID, companyID, "BUILD_PRODUCTION_BUILDING", "building", building.ID, map[string]interface{}{
 			"master_id": productionBuildingMasterID,
 			"cost":      masterBuilding.ConstructionCost,
-		})
+		}); err != nil {
+			log.Error().Err(err).Msg("Audit log failed: BUILD_PRODUCTION_BUILDING")
+		}
 	}
 	return building.ToDTO(), nil
 }
@@ -172,20 +237,42 @@ func (s *ProductionService) UpgradeBuilding(ctx context.Context, companyID, buil
 		return nil, companyModels.ErrInsufficientFunds
 	}
 
-	// Deduct money
-	if err := company.RemoveMoney(upgradeCost); err != nil {
-		return nil, err
-	}
-	if _, err := s.companyRepo.UpdateCompanyMoney(ctx, companyID, company.Money); err != nil {
-		return nil, err
-	}
-
-	// Update level and construction time.
-	// Upgrade time equals construction time regardless of how many levels are upgraded (per spec).
+	// Deduct money and upgrade level atomically
+	newMoney := company.Money - upgradeCost
 	newLevel := building.Level + levels
 	constructionEndsAt := time.Now().UTC().Add(time.Duration(masterBuilding.ConstructionTimeS) * time.Second)
-	if err := s.buildingRepo.UpdateBuildingLevel(ctx, buildingID, newLevel, constructionEndsAt); err != nil {
-		return nil, err
+
+	if s.db != nil && s.queries != nil {
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return nil, err
+		}
+		defer tx.Rollback()
+		txq := s.queries.WithTx(tx)
+
+		if _, err := txq.UpdateCompanyMoney(ctx, dbqueries.UpdateCompanyMoneyParams{Money: newMoney, ID: companyID}); err != nil {
+			return nil, err
+		}
+		if err := txq.UpdateCompanyProductionBuildingLevel(ctx, dbqueries.UpdateCompanyProductionBuildingLevelParams{
+			Level:              newLevel,
+			ConstructionEndsAt: &constructionEndsAt,
+			ID:                 buildingID,
+		}); err != nil {
+			return nil, err
+		}
+		if err := tx.Commit(); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := company.RemoveMoney(upgradeCost); err != nil {
+			return nil, err
+		}
+		if _, err := s.companyRepo.UpdateCompanyMoney(ctx, companyID, company.Money); err != nil {
+			return nil, err
+		}
+		if err := s.buildingRepo.UpdateBuildingLevel(ctx, buildingID, newLevel, constructionEndsAt); err != nil {
+			return nil, err
+		}
 	}
 
 	building.Level = newLevel
@@ -195,11 +282,13 @@ func (s *ProductionService) UpgradeBuilding(ctx context.Context, companyID, buil
 	logger.Info().Int64("new_level", newLevel).Time("ends_at", constructionEndsAt).Msg("Building upgrade started")
 	if s.auditRepo != nil {
 		userID, _ := ctx.Value("user_id").(string)
-		_ = s.auditRepo.Log(ctx, userID, companyID, "UPGRADE_PRODUCTION_BUILDING", "building", buildingID, map[string]interface{}{
+		if err := s.auditRepo.Log(ctx, userID, companyID, "UPGRADE_PRODUCTION_BUILDING", "building", buildingID, map[string]interface{}{
 			"levels":    levels,
 			"new_level": newLevel,
 			"cost":      upgradeCost,
-		})
+		}); err != nil {
+			log.Error().Err(err).Msg("Audit log failed: UPGRADE_PRODUCTION_BUILDING")
+		}
 	}
 	return building.ToDTO(), nil
 }
@@ -250,47 +339,99 @@ func (s *ProductionService) StartProduction(ctx context.Context, companyID, buil
 		}
 	}
 
-	// Validate and consume input resources (quantity × cycles × level)
-	level := building.Level
-	for _, res := range process.Resources {
-		if !res.IsOutput {
-			required := res.Quantity * cycles * level
-			item, err := s.inventoryRepo.GetInventoryItem(ctx, companyID, res.ResourceID)
-			if err != nil {
-				return nil, err
-			}
-			if item == nil || item.Quantity < required {
-				return nil, companyModels.ErrInsufficientInventory
-			}
-		}
-	}
-	for _, res := range process.Resources {
-		if !res.IsOutput {
-			required := res.Quantity * cycles * level
-			if _, err := s.inventoryRepo.RemoveFromInventory(ctx, companyID, res.ResourceID, required); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	// Create production run
+	// Consume input resources and create production run atomically
 	now := time.Now().UTC()
 	endsAt := now.Add(time.Duration(process.CycleTimeS*cycles) * time.Second)
-	run, err := s.productionRunRepo.CreateProductionRun(ctx, buildingID, process.ID, cycles, now, endsAt)
-	if err != nil {
-		logger.Error().Err(err).Msg("Failed to create production run")
-		return nil, err
+	level := building.Level
+
+	var run *productionModels.ProductionRun
+	if s.db != nil && s.queries != nil {
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return nil, err
+		}
+		defer tx.Rollback()
+		txq := s.queries.WithTx(tx)
+
+		for _, res := range process.Resources {
+			if !res.IsOutput {
+				required := res.Quantity * cycles * level
+				item, err := txq.GetInventoryItem(ctx, dbqueries.GetInventoryItemParams{CompanyID: companyID, ResourceID: res.ResourceID})
+				if err != nil {
+					return nil, err
+				}
+				newQty := item.Quantity - required
+				if newQty < 0 {
+					return nil, companyModels.ErrInsufficientInventory
+				}
+				if _, err := txq.RemoveFromInventory(ctx, dbqueries.RemoveFromInventoryParams{Quantity: newQty, CompanyID: companyID, ResourceID: res.ResourceID}); err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		runID := uuid.New().String()
+		if err := txq.CreateProductionRun(ctx, dbqueries.CreateProductionRunParams{
+			ID:                runID,
+			CompanyBuildingID: buildingID,
+			ProcessID:         process.ID,
+			ProductionCycles:  cycles,
+			StartedAt:         now,
+			EndsAt:            endsAt,
+		}); err != nil {
+			return nil, err
+		}
+		if err := tx.Commit(); err != nil {
+			return nil, err
+		}
+
+		dbRun, err := s.productionRunRepo.GetProductionRunByID(ctx, runID)
+		if err != nil {
+			return nil, err
+		}
+		run = dbRun
+	} else {
+		// Validate and consume input resources (quantity × cycles × level)
+		for _, res := range process.Resources {
+			if !res.IsOutput {
+				required := res.Quantity * cycles * level
+				item, err := s.inventoryRepo.GetInventoryItem(ctx, companyID, res.ResourceID)
+				if err != nil {
+					return nil, err
+				}
+				if item == nil || item.Quantity < required {
+					return nil, companyModels.ErrInsufficientInventory
+				}
+			}
+		}
+		for _, res := range process.Resources {
+			if !res.IsOutput {
+				required := res.Quantity * cycles * level
+				if _, err := s.inventoryRepo.RemoveFromInventory(ctx, companyID, res.ResourceID, required); err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		var err error
+		run, err = s.productionRunRepo.CreateProductionRun(ctx, buildingID, process.ID, cycles, now, endsAt)
+		if err != nil {
+			logger.Error().Err(err).Msg("Failed to create production run")
+			return nil, err
+		}
 	}
 
 	building.ActiveRun = run
 	logger.Info().Str("run_id", run.ID).Time("ends_at", endsAt).Msg("Production started")
 	if s.auditRepo != nil {
 		userID, _ := ctx.Value("user_id").(string)
-		_ = s.auditRepo.Log(ctx, userID, companyID, "START_PRODUCTION", "building", buildingID, map[string]interface{}{
+		if err := s.auditRepo.Log(ctx, userID, companyID, "START_PRODUCTION", "building", buildingID, map[string]interface{}{
 			"run_id":     run.ID,
 			"process_id": processMasterID,
 			"cycles":     cycles,
-		})
+		}); err != nil {
+			log.Error().Err(err).Msg("Audit log failed: START_PRODUCTION")
+		}
 	}
 	return building.ToDTO(), nil
 }
@@ -330,29 +471,55 @@ func (s *ProductionService) CollectProduction(ctx context.Context, companyID, bu
 		return nil, ErrProcessNotFound
 	}
 
-	// Add output resources to inventory (quantity × cycles × level)
+	// Add output resources and mark run collected atomically
 	level := building.Level
-	for _, res := range process.Resources {
-		if res.IsOutput {
-			qty := res.Quantity * activeRun.ProductionCycles * level
-			if _, err := s.inventoryRepo.AddToInventory(ctx, companyID, res.ResourceID, qty); err != nil {
-				return nil, err
+	if s.db != nil && s.queries != nil {
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return nil, err
+		}
+		defer tx.Rollback()
+		txq := s.queries.WithTx(tx)
+
+		for _, res := range process.Resources {
+			if res.IsOutput {
+				qty := res.Quantity * activeRun.ProductionCycles * level
+				itemID := uuid.New().String()
+				if _, err := txq.AddToInventory(ctx, dbqueries.AddToInventoryParams{ID: itemID, CompanyID: companyID, ResourceID: res.ResourceID, Quantity: qty}); err != nil {
+					return nil, err
+				}
 			}
 		}
-	}
-
-	// Mark run as collected
-	if err := s.productionRunRepo.MarkRunCollected(ctx, activeRun.ID); err != nil {
-		return nil, err
+		collectedAt := time.Now().UTC()
+		if err := txq.MarkProductionRunCollected(ctx, dbqueries.MarkProductionRunCollectedParams{CollectedAt: &collectedAt, ID: activeRun.ID}); err != nil {
+			return nil, err
+		}
+		if err := tx.Commit(); err != nil {
+			return nil, err
+		}
+	} else {
+		for _, res := range process.Resources {
+			if res.IsOutput {
+				qty := res.Quantity * activeRun.ProductionCycles * level
+				if _, err := s.inventoryRepo.AddToInventory(ctx, companyID, res.ResourceID, qty); err != nil {
+					return nil, err
+				}
+			}
+		}
+		if err := s.productionRunRepo.MarkRunCollected(ctx, activeRun.ID); err != nil {
+			return nil, err
+		}
 	}
 
 	building.ActiveRun = nil
 	logger.Info().Str("run_id", activeRun.ID).Msg("Production collected")
 	if s.auditRepo != nil {
 		userID, _ := ctx.Value("user_id").(string)
-		_ = s.auditRepo.Log(ctx, userID, companyID, "COLLECT_PRODUCTION", "building", buildingID, map[string]interface{}{
+		if err := s.auditRepo.Log(ctx, userID, companyID, "COLLECT_PRODUCTION", "building", buildingID, map[string]interface{}{
 			"run_id": activeRun.ID,
-		})
+		}); err != nil {
+			log.Error().Err(err).Msg("Audit log failed: COLLECT_PRODUCTION")
+		}
 	}
 	return building.ToDTO(), nil
 }

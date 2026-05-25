@@ -4,6 +4,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 	authsvc "github.com/joanob/yourownboss/internal/auth/service"
+	"github.com/joanob/yourownboss/internal/pkg/cache"
 	usersvc "github.com/joanob/yourownboss/internal/users/service"
 )
 
@@ -13,8 +14,9 @@ func RegisterAuthRoutes(
 	userService usersvc.UserService,
 	authService authsvc.AuthService,
 	validator *validator.Validate,
+	rateLimiter *cache.RateLimiter,
 ) {
-	registerHandler := NewRegisterHandler(userService, validator)
+	registerHandler := NewRegisterHandler(userService, validator, rateLimiter)
 	loginHandler := NewLoginHandler(authService, validator)
 	logoutHandler := NewLogoutHandler(authService)
 

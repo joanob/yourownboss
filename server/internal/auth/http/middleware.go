@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -84,7 +85,7 @@ func AuthMiddleware(jwtManager *crypto.JWTManager, sessionCache *cache.SessionCa
 				Name:     "session_token",
 				Value:    newSessionToken,
 				HttpOnly: true,
-				Secure:   true,
+				Secure:   os.Getenv("ENVIRONMENT") == "production",
 				SameSite: http.SameSiteStrictMode,
 				Path:     "/",
 				MaxAge:   int(expiresAt.Sub(time.Now()).Seconds()),

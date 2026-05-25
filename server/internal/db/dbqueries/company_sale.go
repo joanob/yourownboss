@@ -2,6 +2,8 @@ package dbqueries
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 )
 
@@ -217,4 +219,54 @@ type MarkSaleRunCollectedParams struct {
 func (q *Queries) MarkSaleRunCollected(ctx context.Context, arg MarkSaleRunCollectedParams) error {
 	_, err := q.db.ExecContext(ctx, markSaleRunCollected, arg.CollectedAt, arg.ID)
 	return err
+}
+
+// GetActiveSaleRunsByBuildingIDs returns all active (non-collected) sale runs
+// for the given building IDs in a single query, avoiding the N+1 problem in GetBuildings.
+func (q *Queries) GetActiveSaleRunsByBuildingIDs(ctx context.Context, buildingIDs []string) ([]SaleRun, error) {
+	if len(buildingIDs) == 0 {
+		return nil, nil
+	}
+
+	placeholders := strings.Repeat("?,", len(buildingIDs))
+	placeholders = placeholders[:len(placeholders)-1]
+
+	query := fmt.Sprintf(`
+SELECT id, company_sale_building_id, resource_id, units_to_sell, started_at, ends_at,
+       is_collected, collected_at, is_deleted, deleted_at
+FROM sale_runs
+WHERE company_sale_building_id IN (%s) AND is_collected = 0 AND is_deleted = 0
+`, placeholders)
+
+	args := make([]interface{}, len(buildingIDs))
+	for i, id := range buildingIDs {
+		args[i] = id
+	}
+
+	rows, err := q.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []SaleRun
+	for rows.Next() {
+		var i SaleRun
+		if err := rows.Scan(
+			&i.ID,
+			&i.CompanySaleBuildingID,
+			&i.ResourceID,
+			&i.UnitsToSell,
+			&i.StartedAt,
+			&i.EndsAt,
+			&i.IsCollected,
+			&i.CollectedAt,
+			&i.IsDeleted,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	return items, rows.Err()
 }

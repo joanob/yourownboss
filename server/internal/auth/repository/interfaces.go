@@ -50,4 +50,7 @@ type LoginAttemptRepository interface {
 	// RecordFailure records a failed login attempt for a username.
 	// `id` is a new unique UUID for the record.
 	RecordFailure(ctx context.Context, id, username string) error
+
+	// DeleteOldAttempts removes records older than 7 days.
+	DeleteOldAttempts(ctx context.Context) error
 }

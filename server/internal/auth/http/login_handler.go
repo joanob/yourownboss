@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -85,12 +86,14 @@ func (h *LoginHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		CreatedAt: loginResp.User.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
 
+	secureCookie := os.Getenv("ENVIRONMENT") == "production"
+
 	// Set session token cookie (httpOnly, 1 minute)
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session_token",
 		Value:    loginResp.SessionToken,
 		HttpOnly: true,
-		Secure:   true, // HTTPS only in production
+		Secure:   secureCookie,
 		SameSite: http.SameSiteStrictMode,
 		Path:     "/",
 		MaxAge:   60, // 1 minute
@@ -101,7 +104,7 @@ func (h *LoginHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		Name:     "refresh_token",
 		Value:    loginResp.RefreshToken,
 		HttpOnly: true,
-		Secure:   true, // HTTPS only in production
+		Secure:   secureCookie,
 		SameSite: http.SameSiteStrictMode,
 		Path:     "/",
 		MaxAge:   int((300 * 24 * time.Hour).Seconds()),

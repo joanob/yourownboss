@@ -2,6 +2,8 @@ package dbqueries
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 )
 
@@ -217,4 +219,54 @@ type MarkProductionRunCollectedParams struct {
 func (q *Queries) MarkProductionRunCollected(ctx context.Context, arg MarkProductionRunCollectedParams) error {
 	_, err := q.db.ExecContext(ctx, markProductionRunCollected, arg.CollectedAt, arg.ID)
 	return err
+}
+
+// GetActiveProductionRunsByBuildingIDs returns all active (non-collected) production runs
+// for the given building IDs in a single query, avoiding the N+1 problem in GetBuildings.
+func (q *Queries) GetActiveProductionRunsByBuildingIDs(ctx context.Context, buildingIDs []string) ([]ProductionRun, error) {
+	if len(buildingIDs) == 0 {
+		return nil, nil
+	}
+
+	placeholders := strings.Repeat("?,", len(buildingIDs))
+	placeholders = placeholders[:len(placeholders)-1]
+
+	query := fmt.Sprintf(`
+SELECT id, company_building_id, process_id, production_cycles, started_at, ends_at,
+       is_collected, collected_at, is_deleted, deleted_at
+FROM production_runs
+WHERE company_building_id IN (%s) AND is_collected = 0 AND is_deleted = 0
+`, placeholders)
+
+	args := make([]interface{}, len(buildingIDs))
+	for i, id := range buildingIDs {
+		args[i] = id
+	}
+
+	rows, err := q.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []ProductionRun
+	for rows.Next() {
+		var i ProductionRun
+		if err := rows.Scan(
+			&i.ID,
+			&i.CompanyBuildingID,
+			&i.ProcessID,
+			&i.ProductionCycles,
+			&i.StartedAt,
+			&i.EndsAt,
+			&i.IsCollected,
+			&i.CollectedAt,
+			&i.IsDeleted,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	return items, rows.Err()
 }

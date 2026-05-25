@@ -17,6 +17,7 @@ type SaleRunRepositoryInterface interface {
 	CreateSaleRun(ctx context.Context, companySaleBuildingID, resourceID string, unitsToSell int64, startedAt, endsAt time.Time) (*models.SaleRun, error)
 	GetSaleRunByID(ctx context.Context, id string) (*models.SaleRun, error)
 	GetActiveRunByBuildingID(ctx context.Context, companySaleBuildingID string) (*models.SaleRun, error)
+	GetActiveRunsByBuildingIDs(ctx context.Context, buildingIDs []string) ([]*models.SaleRun, error)
 	MarkRunCollected(ctx context.Context, id string, collectedAt time.Time) error
 }
 
@@ -90,6 +91,20 @@ func (r *SaleRunRepository) GetActiveRunByBuildingID(ctx context.Context, compan
 	}
 
 	return models.FromDBSaleRun(&dbo), nil
+}
+
+// GetActiveRunsByBuildingIDs returns all active sale runs for the given buildings in one query.
+func (r *SaleRunRepository) GetActiveRunsByBuildingIDs(ctx context.Context, buildingIDs []string) ([]*models.SaleRun, error) {
+	dbos, err := r.queries.GetActiveSaleRunsByBuildingIDs(ctx, buildingIDs)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to get active sale runs by building IDs")
+		return nil, err
+	}
+	runs := make([]*models.SaleRun, 0, len(dbos))
+	for i := range dbos {
+		runs = append(runs, models.FromDBSaleRun(&dbos[i]))
+	}
+	return runs, nil
 }
 
 // MarkRunCollected marks a sale run as collected

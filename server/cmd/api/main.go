@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -95,7 +97,8 @@ func main() {
 		jwtSecret = generateRandomSecret(32)
 	}
 	if len(jwtSecret) < 32 {
-		logger.Warn().Msg("JWT_SECRET tiene menos de 32 caracteres. Se recomienda usar al menos 32 caracteres")
+		logger.Fatal().Msg("JWT_SECRET debe tener al menos 32 caracteres. Corrija la configuración y reinicie")
+		os.Exit(1)
 	}
 
 	initialCompanyMoney := os.Getenv("INITIAL_COMPANY_MONEY")
@@ -107,6 +110,10 @@ func main() {
 		logger.Warn().Str("value", initialCompanyMoney).Msg("INITIAL_COMPANY_MONEY inválido. Usando 1000 por defecto")
 		initialCompanyMoneyInt = 1000
 	}
+
+	// Root context for graceful shutdown (B-01)
+	rootCtx, rootCancel := context.WithCancel(context.Background())
+	defer rootCancel()
 
 	// Inicializar base de datos
 	dbPath := os.Getenv("DATABASE_URL")
@@ -189,7 +196,7 @@ func main() {
 	// Rate limiter (Phase 8 — market/production anti-abuse)
 	rateLimiter := cache.NewRateLimiter()
 	// Iniciar limpieza periódica de entradas antiguas del rate limiter (SEC-05)
-	rateLimiter.StartCleanup(5 * time.Minute)
+	rateLimiter.StartCleanup(rootCtx, 5*time.Minute)
 
 	// Crear Services
 	userService := usersvc.NewUserService(userRepository, passwordManager)
@@ -220,6 +227,11 @@ func main() {
 		auditRepository,
 	)
 
+	// C-01: Provide real db connection for atomic transactions
+	marketService.SetDB(dbConn, queries)
+	productionService.SetDB(dbConn, queries)
+	saleService.SetDB(dbConn, queries)
+
 	// Gamedata service (Phase 3)
 	gamedataSvc := gameDataService.NewGamedataService(
 		resourceRepository,
@@ -229,6 +241,9 @@ func main() {
 		saleResourceRepository,
 		gamedataCache,
 	)
+
+	// A-04: Periodic cleanup of old login_attempts records
+	go startLoginAttemptCleanupRoutine(rootCtx, loginAttemptRepository, 24*time.Hour)
 
 	// Load and cache gamedata
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -252,10 +267,14 @@ func main() {
 		adminCtx, adminCancel := context.WithTimeout(context.Background(), 5*time.Second)
 
 		// Verificar si admin ya existe
-		adminUser, _ := userRepository.GetByUsername(adminCtx, "admin")
+		adminUsername := os.Getenv("ADMIN_USERNAME")
+		if adminUsername == "" {
+			adminUsername = "admin"
+		}
+		adminUser, _ := userRepository.GetByUsername(adminCtx, adminUsername)
 		if adminUser == nil {
-			logger.Info().Msg("Creando usuario admin...")
-			_, err := userService.Register(adminCtx, "admin", "admin@yourownboss.local", adminPassword, "UTC")
+			logger.Info().Str("username", adminUsername).Msg("Creando usuario admin...")
+			_, err := userService.Register(adminCtx, adminUsername, "admin@yourownboss.local", adminPassword, "UTC")
 			if err != nil {
 				adminCancel()
 				logger.Error().Err(err).Msg("Error al crear usuario admin")
@@ -282,6 +301,14 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
+	// M-01: Limit request body size to 1 MB to prevent memory exhaustion
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB
+			next.ServeHTTP(w, r)
+		})
+	})
+
 	// Security headers (SEC-08): X-Content-Type-Options, X-Frame-Options, etc.
 	r.Use(securityHeadersMiddleware())
 
@@ -306,7 +333,7 @@ func main() {
 	})
 
 	// Registrar rutas de autenticación
-	authhttphandlers.RegisterAuthRoutes(r, userService, authService, validate)
+	authhttphandlers.RegisterAuthRoutes(r, userService, authService, validate, rateLimiter)
 	logger.Debug().Msg("Rutas de autenticación registradas")
 
 	// Registrar rutas de usuarios (requiere autenticación)
@@ -349,9 +376,28 @@ func main() {
 		Str("version", appVersion).
 		Msg("Servidor escuchando")
 
-	if err := http.ListenAndServe(addr, r); err != nil && err != http.ErrServerClosed {
-		logger.Fatal().Err(err).Msg("Error al iniciar servidor")
+	// B-01: Graceful shutdown
+	srv := &http.Server{Addr: addr, Handler: r}
+
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Fatal().Err(err).Msg("Error del servidor")
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	logger.Info().Msg("Señal de apagado recibida, cerrando servidor...")
+	rootCancel()
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		logger.Error().Err(err).Msg("Error durante el apagado del servidor")
 	}
+	logger.Info().Msg("Servidor apagado correctamente")
 }
 
 // generateRandomSecret generates a cryptographically random secret encoded as base64.
@@ -452,5 +498,26 @@ func startSessionCleanupRoutine(sc *cache.SessionCache, interval time.Duration) 
 			Int("deleted_sessions", deleted).
 			Int("remaining_sessions", sc.Count()).
 			Msg("Limpieza de sesiones completada")
+	}
+}
+
+// startLoginAttemptCleanupRoutine runs a periodic job to delete login_attempts older than 7 days (A-04).
+func startLoginAttemptCleanupRoutine(ctx context.Context, repo authrepo.LoginAttemptRepository, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	logger := loggerutil.GetLogger()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := repo.DeleteOldAttempts(ctx); err != nil {
+				logger.Error().Err(err).Msg("Error durante limpieza de login_attempts")
+			} else {
+				logger.Info().Msg("Limpieza de login_attempts completada")
+			}
+		}
 	}
 }

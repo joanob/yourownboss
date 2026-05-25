@@ -31,3 +31,13 @@ func (q *Queries) InsertLoginAttempt(ctx context.Context, id, username string) e
 	_, err := q.db.ExecContext(ctx, insertLoginAttempt, id, username)
 	return err
 }
+
+const deleteOldLoginAttempts = `
+DELETE FROM login_attempts WHERE failed_at < datetime('now', '-7 days')
+`
+
+// DeleteOldLoginAttempts removes login_attempt records older than 7 days to prevent unbounded table growth.
+func (q *Queries) DeleteOldLoginAttempts(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, deleteOldLoginAttempts)
+	return err
+}
