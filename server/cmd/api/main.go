@@ -19,6 +19,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 
 	auditrepo "github.com/joanob/yourownboss/internal/audit/repository"
 	authcrypto "github.com/joanob/yourownboss/internal/auth/crypto"
@@ -297,7 +298,8 @@ func main() {
 
 	// Middleware global
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
+	r.Use(clientIPMiddleware())
+	r.Use(requestLoggingMiddleware())
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
@@ -319,7 +321,6 @@ func main() {
 	r.Use(middleware.Timeout(30 * time.Second))
 
 	// Rutas de salud
-	r.Get("/api/v1/status", makeHealthHandler(dbConn))
 	r.Get("/health", makeHealthHandler(dbConn))
 
 	// Placeholder para root
@@ -336,33 +337,38 @@ func main() {
 	authhttphandlers.RegisterAuthRoutes(r, userService, authService, validate, rateLimiter)
 	logger.Debug().Msg("Rutas de autenticación registradas")
 
-	// Registrar rutas de usuarios (requiere autenticación)
-	r.Route("/api/v1/users", func(r chi.Router) {
-		r.Use(authhttphandlers.AuthMiddleware(jwtManager, sessionCache))
-		userhttphandlers.RegisterUsersRoutes(r, userService, validate)
-	})
-	logger.Debug().Msg("Rutas de usuarios registradas")
-
-	// Registrar rutas de company, market y production (requieren autenticación)
+	// Registrar rutas de company, market, users, production y gamedata
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Use(authhttphandlers.AuthMiddleware(jwtManager, sessionCache))
-		companyhttphandlers.RegisterCompanyRoutes(r, companyService, inventoryService, initialCompanyMoneyInt, sessionCache)
-		markethttphandlers.RegisterMarketRoutes(r, marketService, rateLimiter)
-		productionhttphandlers.RegisterProductionRoutes(r, productionService, rateLimiter)
-		salehttphandlers.RegisterSaleRoutes(r, saleService)
+		// Rutas públicas de gamedata (sin autenticación)
+		gameDataHttp.RegisterGamedataRoutes(r, gamedataSvc)
+		logger.Debug().Msg("Rutas públicas de gamedata registradas")
 
-		// Admin-only endpoints (require auth + admin role)
+		// Rutas que requieren autenticación (grupo separado)
 		r.Group(func(r chi.Router) {
-			r.Use(authhttphandlers.RequireAuth())
-			r.Use(authhttphandlers.RequireAdmin(userRepository))
-			gameDataHttp.RegisterAdminGamedataRoutes(r, gamedataSvc)
+			r.Use(authhttphandlers.AuthMiddleware(jwtManager, sessionCache))
+
+			// Users endpoints
+			r.Route("/users", func(r chi.Router) {
+				userhttphandlers.RegisterUsersRoutes(r, userService, validate)
+			})
+			logger.Debug().Msg("Rutas de usuarios registradas")
+
+			// Status endpoint
+			r.Get("/status", makeHealthHandler(dbConn))
+			companyhttphandlers.RegisterCompanyRoutes(r, companyService, inventoryService, initialCompanyMoneyInt, sessionCache)
+			markethttphandlers.RegisterMarketRoutes(r, marketService, rateLimiter)
+			productionhttphandlers.RegisterProductionRoutes(r, productionService, rateLimiter)
+			salehttphandlers.RegisterSaleRoutes(r, saleService)
+
+			// Admin-only endpoints (require auth + admin role)
+			r.Group(func(r chi.Router) {
+				r.Use(authhttphandlers.RequireAuth())
+				r.Use(authhttphandlers.RequireAdmin(userRepository))
+				gameDataHttp.RegisterAdminGamedataRoutes(r, gamedataSvc)
+			})
 		})
 	})
-	logger.Debug().Msg("Rutas de company, market, production y sale registradas")
-
-	// Registrar rutas públicas de gamedata (sin autenticación)
-	gameDataHttp.RegisterGamedataRoutes(r, gamedataSvc)
-	logger.Debug().Msg("Rutas públicas de gamedata registradas")
+	logger.Debug().Msg("Rutas de company, market, production, users y gamedata registradas")
 
 	logger.Info().Msg("Rutas registradas exitosamente")
 
@@ -442,6 +448,60 @@ func securityHeadersMiddleware() func(next http.Handler) http.Handler {
 			w.Header().Set("X-Frame-Options", "DENY")
 			w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 			w.Header().Set("Content-Security-Policy", "default-src 'none'")
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func clientIPMiddleware() func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ip := getClientIP(r)
+			ctx := context.WithValue(r.Context(), "client_ip", ip)
+			r = r.WithContext(ctx)
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func getClientIP(r *http.Request) string {
+	// 1. X-Forwarded-For (si está detrás de un proxy)
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		ips := strings.Split(xff, ",")
+		if len(ips) > 0 {
+			return strings.TrimSpace(ips[len(ips)-1])
+		}
+	}
+
+	// 2. X-Real-IP (usado por algunos proxies)
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return strings.TrimSpace(xri)
+	}
+
+	// 3. True-Client-IP (Cloudflare)
+	if tci := r.Header.Get("True-Client-IP"); tci != "" {
+		return strings.TrimSpace(tci)
+	}
+
+	// 4. RemoteAddr como fallback
+	ip := r.RemoteAddr
+	if colon := strings.LastIndex(ip, ":"); colon != -1 {
+		ip = ip[:colon]
+	}
+	return ip
+}
+
+func requestLoggingMiddleware() func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ip := r.Context().Value("client_ip")
+			reqID := r.Context().Value(middleware.RequestIDKey)
+			log.Info().
+				Str("ip", ip.(string)).
+				Str("method", r.Method).
+				Str("path", r.RequestURI).
+				Str("request_id", reqID.(string)).
+				Msg("Incoming request")
 			next.ServeHTTP(w, r)
 		})
 	}

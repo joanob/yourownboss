@@ -2,6 +2,7 @@ package logger
 
 import (
 	"os"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -33,6 +34,9 @@ func InitLogger() {
 	if err != nil {
 		level = zerolog.InfoLevel
 	}
+
+	// Configurar formato de timestamp a RFC3339 (UTC ISO8601)
+	zerolog.TimeFieldFormat = time.RFC3339Nano
 
 	// Multi-writer: stdout + archivo
 	multiWriter := zerolog.MultiLevelWriter(

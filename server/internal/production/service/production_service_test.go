@@ -213,6 +213,15 @@ func (m *mockProductionRunRepo) GetActiveRunByBuildingID(_ context.Context, buil
 func (m *mockProductionRunRepo) GetProductionRunByID(_ context.Context, runID string) (*productionModels.ProductionRun, error) {
 	return m.runs[runID], nil
 }
+func (m *mockProductionRunRepo) GetActiveRunsByBuildingIDs(_ context.Context, buildingIDs []string) ([]*productionModels.ProductionRun, error) {
+	var result []*productionModels.ProductionRun
+	for _, id := range buildingIDs {
+		if r, ok := m.activeRunByBuilding[id]; ok {
+			result = append(result, r)
+		}
+	}
+	return result, nil
+}
 func (m *mockProductionRunRepo) MarkRunCollected(_ context.Context, runID string) error {
 	r := m.runs[runID]
 	if r != nil {

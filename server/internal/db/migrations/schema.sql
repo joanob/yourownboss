@@ -130,7 +130,7 @@ CREATE TABLE IF NOT EXISTS production_runs (
   deleted_at         DATETIME
 );
 
-CREATE UNIQUE INDEX idx_production_runs_active ON production_runs(company_building_id) WHERE is_collected = 0;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_production_runs_active ON production_runs(company_building_id) WHERE is_collected = 0;
 
 -- VENTA
 
@@ -158,7 +158,7 @@ CREATE TABLE IF NOT EXISTS sale_runs (
   deleted_at                DATETIME
 );
 
-CREATE UNIQUE INDEX idx_sale_runs_active ON sale_runs(company_sale_building_id) WHERE is_collected = 0;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sale_runs_active ON sale_runs(company_sale_building_id) WHERE is_collected = 0;
 
 -- RATE LIMITING
 

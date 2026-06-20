@@ -119,7 +119,7 @@ func (m *mockAuthService) Logout(ctx context.Context, sessionID string) error {
 func TestRegisterHandler_Success(t *testing.T) {
 	mockUserService := &mockUserService{}
 	validator := validator.New()
-	handler := NewRegisterHandler(mockUserService, validator)
+	handler := NewRegisterHandler(mockUserService, validator, nil)
 
 	req := RegisterRequest{
 		Username: "alice",
@@ -142,7 +142,7 @@ func TestRegisterHandler_Success(t *testing.T) {
 func TestRegisterHandler_InvalidInput(t *testing.T) {
 	mockUserService := &mockUserService{}
 	validator := validator.New()
-	handler := NewRegisterHandler(mockUserService, validator)
+	handler := NewRegisterHandler(mockUserService, validator, nil)
 
 	// Invalid JSON
 	httpReq := httptest.NewRequest("POST", "/register", bytes.NewReader([]byte("invalid json")))
@@ -160,7 +160,7 @@ func TestRegisterHandler_UsernameExists(t *testing.T) {
 		registerErr: fmt.Errorf("username already exists"),
 	}
 	validator := validator.New()
-	handler := NewRegisterHandler(mockUserService, validator)
+	handler := NewRegisterHandler(mockUserService, validator, nil)
 
 	req := RegisterRequest{
 		Username: "alice",

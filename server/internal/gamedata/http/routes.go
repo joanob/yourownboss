@@ -7,16 +7,15 @@ import (
 )
 
 // RegisterGamedataRoutes registers all public (unauthenticated) gamedata read endpoints.
+// The router must already be within /api/v1 context.
 func RegisterGamedataRoutes(router chi.Router, gamedataService *service.GamedataService) {
-	router.Route("/api/v1", func(r chi.Router) {
-		r.Get("/gamedata", GetGamedataHandler(gamedataService))
-		r.Get("/resources", GetResourcesHandler(gamedataService))
-		r.Get("/resources/{resourceID}", GetResourceHandler(gamedataService))
-		r.Get("/production/buildings", GetProductionBuildingsHandler(gamedataService))
-		r.Get("/production/buildings/{buildingID}", GetProductionBuildingHandler(gamedataService))
-		r.Get("/sale/buildings", GetSaleBuildingsHandler(gamedataService))
-		r.Get("/sale/buildings/{buildingID}", GetSaleBuildingHandler(gamedataService))
-	})
+	router.Get("/gamedata", GetGamedataHandler(gamedataService))
+	router.Get("/resources", GetResourcesHandler(gamedataService))
+	router.Get("/resources/{resourceID}", GetResourceHandler(gamedataService))
+	router.Get("/production/buildings", GetProductionBuildingsHandler(gamedataService))
+	router.Get("/production/buildings/{buildingID}", GetProductionBuildingHandler(gamedataService))
+	router.Get("/sale/buildings", GetSaleBuildingsHandler(gamedataService))
+	router.Get("/sale/buildings/{buildingID}", GetSaleBuildingHandler(gamedataService))
 }
 
 // RegisterAdminGamedataRoutes registers the admin-only gamedata import endpoint.

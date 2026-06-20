@@ -209,6 +209,15 @@ func (m *mockSaleRunRepo) GetSaleRunByID(_ context.Context, id string) (*saleMod
 func (m *mockSaleRunRepo) GetActiveRunByBuildingID(_ context.Context, companySaleBuildingID string) (*saleModels.SaleRun, error) {
 	return m.activeRunByBuilding[companySaleBuildingID], nil
 }
+func (m *mockSaleRunRepo) GetActiveRunsByBuildingIDs(_ context.Context, buildingIDs []string) ([]*saleModels.SaleRun, error) {
+	var result []*saleModels.SaleRun
+	for _, id := range buildingIDs {
+		if r, ok := m.activeRunByBuilding[id]; ok {
+			result = append(result, r)
+		}
+	}
+	return result, nil
+}
 func (m *mockSaleRunRepo) MarkRunCollected(_ context.Context, id string, collectedAt time.Time) error {
 	r := m.runs[id]
 	if r != nil {
