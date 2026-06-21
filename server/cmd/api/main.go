@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -49,237 +50,251 @@ import (
 	usersvc "github.com/joanob/yourownboss/internal/users/service"
 )
 
+// appConfig contiene todos los valores de configuración validados desde variables de entorno.
+type appConfig struct {
+	AppVersion             string
+	LogLevel               string
+	DatabaseURL            string
+	JWTSecret              string
+	Port                   string
+	InitialCompanyMoney    int64
+	AdminUsername          string
+	AdminPassword          string
+	CORSAllowedOrigins     string
+	SessionCleanupInterval time.Duration
+}
+
+// appCaches agrupa todas las cachés en memoria utilizadas por la aplicación.
+type appCaches struct {
+	gamedata    *cache.GamedataCache
+	session     *cache.SessionCache
+	rateLimiter *cache.RateLimiter
+}
+
+// routerDeps agrupa todos los servicios y componentes necesarios para registrar las rutas HTTP.
+type routerDeps struct {
+	validate          *validator.Validate
+	jwtManager        *authcrypto.JWTManager
+	userService       usersvc.UserService
+	authService       authsvc.AuthService
+	companyService    companysvc.CompanyService
+	inventoryService  companysvc.InventoryService
+	marketService     *marketsvc.MarketService
+	productionService *productionsvc.ProductionService
+	saleService       *salesvc.SaleService
+	gamedataSvc       *gameDataService.GamedataService
+	userRepository    userrepo.UserRepository
+}
+
 func main() {
-	// Cargar variables de entorno
-	godotenv.Load()
+	loadEnv()
 
-	// Inicializar logger
-	loggerutil.InitLogger()
-	logger := loggerutil.GetLogger()
+	logger := initLogger()
 
-	// Obtener configuración
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
+	cfg := loadConfig(logger)
 
-	logLevel := os.Getenv("LOG_LEVEL")
-	if logLevel == "" {
-		logLevel = "info"
-	}
+	dbConn := initDatabase(cfg, logger)
+	defer dbConn.Close()
 
-	appVersion := os.Getenv("APP_VERSION")
-	if appVersion == "" {
-		appVersion = "0.1.0"
-	}
-
-	// Ajustar nivel de logging
-	switch logLevel {
-	case "debug":
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	case "warn":
-		zerolog.SetGlobalLevel(zerolog.WarnLevel)
-	case "error":
-		zerolog.SetGlobalLevel(zerolog.ErrorLevel)
-	default:
-		zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	}
-
-	logger.Info().
-		Str("port", port).
-		Str("log_level", logLevel).
-		Str("version", appVersion).
-		Msg("Iniciando Your Own Boss Backend - Fase 1.11")
-
-	// Validar JWT_SECRET
-	jwtSecret := os.Getenv("JWT_SECRET")
-	if jwtSecret == "" {
-		logger.Warn().Msg("JWT_SECRET no configurado. Generando secreto aleatorio para desarrollo")
-		jwtSecret = generateRandomSecret(32)
-	}
-	if len(jwtSecret) < 32 {
-		logger.Fatal().Msg("JWT_SECRET debe tener al menos 32 caracteres. Corrija la configuración y reinicie")
-		os.Exit(1)
-	}
-
-	initialCompanyMoney := os.Getenv("INITIAL_COMPANY_MONEY")
-	if initialCompanyMoney == "" {
-		initialCompanyMoney = "1000"
-	}
-	initialCompanyMoneyInt, err := strconv.ParseInt(initialCompanyMoney, 10, 64)
-	if err != nil || initialCompanyMoneyInt <= 0 {
-		logger.Warn().Str("value", initialCompanyMoney).Msg("INITIAL_COMPANY_MONEY inválido. Usando 1000 por defecto")
-		initialCompanyMoneyInt = 1000
-	}
-
-	// Root context for graceful shutdown (B-01)
 	rootCtx, rootCancel := context.WithCancel(context.Background())
 	defer rootCancel()
 
-	// Inicializar base de datos
-	dbPath := os.Getenv("DATABASE_URL")
-	if dbPath == "" {
-		dbPath = "./data/game.db"
+	caches := initCaches(rootCtx, cfg, logger)
+
+	deps := buildDependencies(dbConn, caches, cfg, rootCtx, logger)
+
+	router := buildRouter(deps, caches, cfg, dbConn)
+
+	runServer(rootCtx, rootCancel, cfg, router, logger)
+}
+
+// loadEnv carga las variables de entorno desde el fichero .env si existe.
+func loadEnv() {
+	godotenv.Load()
+}
+
+// initLogger inicializa el logger global y lo devuelve.
+func initLogger() zerolog.Logger {
+	loggerutil.InitLogger()
+	return loggerutil.GetLogger()
+}
+
+// loadConfig lee, valida y devuelve la configuración de la aplicación desde las variables de entorno.
+// Termina el proceso si alguna variable obligatoria falta o tiene un valor inválido.
+func loadConfig(logger zerolog.Logger) *appConfig {
+	cfg := &appConfig{}
+
+	cfg.AppVersion = getEnvOrDefault("APP_VERSION", "0.1.0")
+	cfg.LogLevel = getEnvOrDefault("LOG_LEVEL", "info")
+	cfg.DatabaseURL = getEnvOrDefault("DATABASE_URL", "./data/game.db")
+	cfg.Port = getEnvOrDefault("PORT", "8080")
+	cfg.CORSAllowedOrigins = getEnvOrDefault("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
+	cfg.AdminUsername = getEnvOrDefault("ADMIN_USERNAME", "admin")
+
+	cfg.AdminPassword = os.Getenv("ADMIN_PASSWORD")
+	if cfg.AdminPassword == "" {
+		logger.Warn().Msg("ADMIN_PASSWORD no configurado. Admin no será creado automáticamente")
 	}
 
-	logger.Info().Str("path", dbPath).Msg("Inicializando base de datos...")
-	dbConn, err := db.InitDatabase(dbPath)
+	cfg.JWTSecret = os.Getenv("JWT_SECRET")
+	if cfg.JWTSecret == "" {
+		logger.Warn().Msg("JWT_SECRET no configurado. Generando secreto aleatorio para desarrollo")
+		cfg.JWTSecret = generateRandomSecret(32)
+	}
+	if len(cfg.JWTSecret) < 32 {
+		logger.Fatal().Msg("JWT_SECRET debe tener al menos 32 caracteres. Corrige la configuración y reinicia")
+	}
+
+	moneyStr := getEnvOrDefault("INITIAL_COMPANY_MONEY", "1000")
+	money, err := strconv.ParseInt(moneyStr, 10, 64)
+	if err != nil || money <= 0 {
+		logger.Warn().Str("value", moneyStr).Msg("INITIAL_COMPANY_MONEY inválido. Usando 1000 por defecto")
+		money = 1000
+	}
+	cfg.InitialCompanyMoney = money
+
+	intervalStr := getEnvOrDefault("SESSION_CACHE_CLEANUP_INTERVAL", "21600")
+	intervalSecs, err := strconv.ParseInt(intervalStr, 10, 64)
+	if err != nil || intervalSecs <= 0 {
+		intervalSecs = 21600
+	}
+	cfg.SessionCleanupInterval = time.Duration(intervalSecs) * time.Second
+
+	logger.Info().
+		Str("port", cfg.Port).
+		Str("log_level", cfg.LogLevel).
+		Str("version", cfg.AppVersion).
+		Msg("Configuración cargada correctamente")
+
+	return cfg
+}
+
+// initDatabase abre y valida la conexión a la base de datos.
+// Termina el proceso si la inicialización falla.
+func initDatabase(cfg *appConfig, logger zerolog.Logger) *sql.DB {
+	logger.Info().Str("path", cfg.DatabaseURL).Msg("Inicializando base de datos...")
+	dbConn, err := db.InitDatabase(cfg.DatabaseURL)
 	if err != nil {
-		logger.Error().Err(err).Msg("Error al inicializar base de datos")
-		os.Exit(1)
+		logger.Fatal().Err(err).Msg("Error al inicializar la base de datos")
 	}
-	defer dbConn.Close()
-
 	logger.Info().Msg("Base de datos inicializada correctamente")
+	return dbConn
+}
 
-	// Inicializar caches
+// initCaches crea todas las cachés en memoria e inicia sus rutinas de limpieza en segundo plano.
+func initCaches(ctx context.Context, cfg *appConfig, logger zerolog.Logger) *appCaches {
 	gamedataCache := cache.NewGamedataCache()
 	sessionCache := cache.NewSessionCache()
+	rateLimiter := cache.NewRateLimiter()
 
-	// Iniciar limpiador de sesiones (cada 6 horas)
-	sessionCleanupInterval := os.Getenv("SESSION_CACHE_CLEANUP_INTERVAL")
-	if sessionCleanupInterval == "" {
-		sessionCleanupInterval = "21600" // 6 horas
+	go startSessionCleanupRoutine(sessionCache, cfg.SessionCleanupInterval)
+	rateLimiter.StartCleanup(ctx, 5*time.Minute)
+
+	logger.Info().Msg("Cachés inicializadas y rutinas de limpieza iniciadas")
+
+	return &appCaches{
+		gamedata:    gamedataCache,
+		session:     sessionCache,
+		rateLimiter: rateLimiter,
 	}
+}
 
-	cleanupIntervalSecs, _ := strconv.ParseInt(sessionCleanupInterval, 10, 64)
-	go startSessionCleanupRoutine(sessionCache, time.Duration(cleanupIntervalSecs)*time.Second)
-
-	logger.Info().Msg("Limpiador de sesiones iniciado")
-
-	// ============================================================================
-	// INYECCIÓN DE DEPENDENCIAS - FASE 1.11
-	// ============================================================================
-
+// buildDependencies construye todos los repositorios y servicios, carga los datos maestros
+// en caché y crea el usuario admin si no existe.
+func buildDependencies(dbConn *sql.DB, caches *appCaches, cfg *appConfig, ctx context.Context, logger zerolog.Logger) *routerDeps {
 	logger.Info().Msg("Inicializando dependencias...")
 
-	// Crear validator
 	validate := validator.New()
-
-	// Crear queries
 	queries := dbqueries.New(dbConn)
 
-	// Crear JWT Manager
 	jwtManager, err := authcrypto.NewJWTManager()
 	if err != nil {
-		logger.Error().Err(err).Msg("Error al crear JWT Manager")
-		os.Exit(1)
+		logger.Fatal().Err(err).Msg("Error al crear JWT Manager")
 	}
-
-	// Crear Password Manager
 	passwordManager := authcrypto.NewPasswordManager()
 
-	// Crear Repositories
+	// Repositorios
 	userRepository := userrepo.NewUserRepository(queries)
 	sessionRepository := authrepo.NewUserSessionRepository(queries)
 	loginAttemptRepository := authrepo.NewLoginAttemptRepository(queries)
 	companyRepository := companyrepo.NewCompanyRepository(queries)
 	inventoryRepository := companyrepo.NewInventoryRepository(queries)
 
-	// Gamedata repositories (Phase 3)
 	resourceRepository := resourcerepo.NewResourceRepository(queries)
 	productionBuildingRepository := productionrepo.NewProductionBuildingRepository(queries)
 	productionProcessRepository := productionrepo.NewProductionProcessRepository(queries)
 	saleBuildingRepository := salerepo.NewSaleBuildingRepository(queries)
 	saleResourceRepository := salerepo.NewSaleResourceRepository(queries)
 
-	// Production company repositories (Phase 5)
 	companyBuildingRepository := productionrepo.NewCompanyBuildingRepository(queries)
 	productionRunRepository := productionrepo.NewProductionRunRepository(queries)
 
-	// Sale company repositories (Phase 6)
 	companySaleBuildingRepository := salerepo.NewCompanySaleBuildingRepository(queries)
 	saleRunRepository := salerepo.NewSaleRunRepository(queries)
 
-	// Audit repository (Phase 7)
 	auditRepository := auditrepo.NewAuditRepository(queries)
 
-	// Rate limiter (Phase 8 — market/production anti-abuse)
-	rateLimiter := cache.NewRateLimiter()
-	// Iniciar limpieza periódica de entradas antiguas del rate limiter (SEC-05)
-	rateLimiter.StartCleanup(rootCtx, 5*time.Minute)
-
-	// Crear Services
+	// Servicios
 	userService := usersvc.NewUserService(userRepository, passwordManager)
-	authService := authsvc.NewAuthService(userRepository, sessionRepository, loginAttemptRepository, passwordManager, jwtManager, sessionCache)
+	authService := authsvc.NewAuthService(userRepository, sessionRepository, loginAttemptRepository, passwordManager, jwtManager, caches.session)
 	companyService := companysvc.NewCompanyService(companyRepository, inventoryRepository)
 	inventoryService := companysvc.NewInventoryService(inventoryRepository, companyRepository)
 
-	// Market service (Phase 4)
-	marketService := marketsvc.NewMarketService(companyRepository, inventoryRepository, gamedataCache, auditRepository)
+	marketService := marketsvc.NewMarketService(companyRepository, inventoryRepository, caches.gamedata, auditRepository)
 
-	// Production service (Phase 5)
 	productionService := productionsvc.NewProductionService(
 		companyRepository,
 		inventoryRepository,
 		companyBuildingRepository,
 		productionRunRepository,
-		gamedataCache,
+		caches.gamedata,
 		auditRepository,
 	)
 
-	// Sale service (Phase 6)
 	saleService := salesvc.NewSaleService(
 		companyRepository,
 		inventoryRepository,
 		companySaleBuildingRepository,
 		saleRunRepository,
-		gamedataCache,
+		caches.gamedata,
 		auditRepository,
 	)
 
-	// C-01: Provide real db connection for atomic transactions
+	// C-01: conexión real para transacciones atómicas
 	marketService.SetDB(dbConn, queries)
 	productionService.SetDB(dbConn, queries)
 	saleService.SetDB(dbConn, queries)
 
-	// Gamedata service (Phase 3)
 	gamedataSvc := gameDataService.NewGamedataService(
 		resourceRepository,
 		productionBuildingRepository,
 		productionProcessRepository,
 		saleBuildingRepository,
 		saleResourceRepository,
-		gamedataCache,
+		caches.gamedata,
 	)
 
-	// A-04: Periodic cleanup of old login_attempts records
-	go startLoginAttemptCleanupRoutine(rootCtx, loginAttemptRepository, 24*time.Hour)
+	// A-04: limpieza periódica de registros antiguos de login_attempts
+	go startLoginAttemptCleanupRoutine(ctx, loginAttemptRepository, 24*time.Hour)
 
-	// Load and cache gamedata
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	if err := gamedataSvc.RefreshCache(ctx); err != nil {
-		logger.Error().Err(err).Msg("Error al cargar datos maestros en cache")
-		os.Exit(1)
+	// Cargar datos maestros en caché
+	cacheCtx, cacheCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cacheCancel()
+	if err := gamedataSvc.RefreshCache(cacheCtx); err != nil {
+		logger.Fatal().Err(err).Msg("Error al cargar datos maestros en caché")
 	}
-	logger.Info().Msg("Datos maestros cargados en cache")
+	logger.Info().Msg("Datos maestros cargados en caché")
 
-	// ============================================================================
-	// CREAR ADMIN SI NO EXISTE
-	// ============================================================================
-
-	adminPassword := os.Getenv("ADMIN_PASSWORD")
-	if adminPassword == "" {
-		logger.Warn().Msg("ADMIN_PASSWORD no configurado. Admin no será creado automáticamente")
-	} else {
-		// CODE-04: cancel explícito al salir del bloque, no defer (que se ejecutaría al final de main)
+	// Crear usuario admin si no existe
+	if cfg.AdminPassword != "" {
 		adminCtx, adminCancel := context.WithTimeout(context.Background(), 5*time.Second)
-
-		// Verificar si admin ya existe
-		adminUsername := os.Getenv("ADMIN_USERNAME")
-		if adminUsername == "" {
-			adminUsername = "admin"
-		}
-		adminUser, _ := userRepository.GetByUsername(adminCtx, adminUsername)
+		adminUser, _ := userRepository.GetByUsername(adminCtx, cfg.AdminUsername)
 		if adminUser == nil {
-			logger.Info().Str("username", adminUsername).Msg("Creando usuario admin...")
-			_, err := userService.Register(adminCtx, adminUsername, "admin@yourownboss.local", adminPassword, "UTC")
+			logger.Info().Str("username", cfg.AdminUsername).Msg("Creando usuario admin...")
+			_, err := userService.Register(adminCtx, cfg.AdminUsername, "admin@yourownboss.local", cfg.AdminPassword, "UTC")
 			if err != nil {
 				adminCancel()
-				logger.Error().Err(err).Msg("Error al crear usuario admin")
-				os.Exit(1)
+				logger.Fatal().Err(err).Msg("Error al crear usuario admin")
 			}
 			logger.Info().Msg("Usuario admin creado exitosamente")
 		} else {
@@ -288,83 +303,84 @@ func main() {
 		adminCancel()
 	}
 
-	// ============================================================================
-	// CREAR ROUTER Y REGISTRAR RUTAS
-	// ============================================================================
+	logger.Info().Msg("Dependencias inicializadas correctamente")
 
-	logger.Info().Msg("Registrando rutas...")
+	return &routerDeps{
+		validate:          validate,
+		jwtManager:        jwtManager,
+		userService:       userService,
+		authService:       authService,
+		companyService:    companyService,
+		inventoryService:  inventoryService,
+		marketService:     marketService,
+		productionService: productionService,
+		saleService:       saleService,
+		gamedataSvc:       gamedataSvc,
+		userRepository:    userRepository,
+	}
+}
+
+// buildRouter crea el router HTTP y registra todos los middlewares y rutas.
+func buildRouter(deps *routerDeps, caches *appCaches, cfg *appConfig, dbConn *sql.DB) http.Handler {
+	logger := loggerutil.GetLogger()
 
 	r := chi.NewRouter()
 
-	// Middleware global
+	// Middlewares globales
 	r.Use(middleware.RequestID)
 	r.Use(clientIPMiddleware())
 	r.Use(requestLoggingMiddleware())
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
-
-	// M-01: Limit request body size to 1 MB to prevent memory exhaustion
+	// M-01: limitar el tamaño del cuerpo de la petición a 1 MB
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB
+			r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 			next.ServeHTTP(w, r)
 		})
 	})
-
-	// Security headers (SEC-08): X-Content-Type-Options, X-Frame-Options, etc.
+	// SEC-08: cabeceras de seguridad HTTP
 	r.Use(securityHeadersMiddleware())
-
-	// CORS middleware (SEC-01): valida origen contra lista blanca
+	// SEC-01: CORS con lista blanca de orígenes
 	r.Use(corsMiddleware())
-
-	// Timeout middleware (30 segundos)
 	r.Use(middleware.Timeout(30 * time.Second))
 
-	// Rutas de salud
 	r.Get("/health", makeHealthHandler(dbConn))
-
-	// Placeholder para root
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
 			"message": "Your Own Boss API",
-			"version": "0.1.0",
+			"version": cfg.AppVersion,
 			"status":  "ok",
 		})
 	})
 
-	// Registrar rutas de autenticación
-	authhttphandlers.RegisterAuthRoutes(r, userService, authService, validate, rateLimiter)
+	authhttphandlers.RegisterAuthRoutes(r, deps.userService, deps.authService, deps.validate, caches.rateLimiter)
 	logger.Debug().Msg("Rutas de autenticación registradas")
 
-	// Registrar rutas de company, market, users, production y gamedata
 	r.Route("/api/v1", func(r chi.Router) {
-		// Rutas públicas de gamedata (sin autenticación)
-		gameDataHttp.RegisterGamedataRoutes(r, gamedataSvc)
+		gameDataHttp.RegisterGamedataRoutes(r, deps.gamedataSvc)
 		logger.Debug().Msg("Rutas públicas de gamedata registradas")
 
-		// Rutas que requieren autenticación (grupo separado)
 		r.Group(func(r chi.Router) {
-			r.Use(authhttphandlers.AuthMiddleware(jwtManager, sessionCache))
+			r.Use(authhttphandlers.AuthMiddleware(deps.jwtManager, caches.session))
 
-			// Users endpoints
 			r.Route("/users", func(r chi.Router) {
-				userhttphandlers.RegisterUsersRoutes(r, userService, validate)
+				userhttphandlers.RegisterUsersRoutes(r, deps.userService, deps.validate)
 			})
 			logger.Debug().Msg("Rutas de usuarios registradas")
 
-			// Status endpoint
 			r.Get("/status", makeHealthHandler(dbConn))
-			companyhttphandlers.RegisterCompanyRoutes(r, companyService, inventoryService, initialCompanyMoneyInt, sessionCache)
-			markethttphandlers.RegisterMarketRoutes(r, marketService, rateLimiter)
-			productionhttphandlers.RegisterProductionRoutes(r, productionService, rateLimiter)
-			salehttphandlers.RegisterSaleRoutes(r, saleService)
+			companyhttphandlers.RegisterCompanyRoutes(r, deps.companyService, deps.inventoryService, cfg.InitialCompanyMoney, caches.session)
+			markethttphandlers.RegisterMarketRoutes(r, deps.marketService, caches.rateLimiter)
+			productionhttphandlers.RegisterProductionRoutes(r, deps.productionService, caches.rateLimiter)
+			salehttphandlers.RegisterSaleRoutes(r, deps.saleService)
 
-			// Admin-only endpoints (require auth + admin role)
+			// Endpoints exclusivos de admin
 			r.Group(func(r chi.Router) {
 				r.Use(authhttphandlers.RequireAuth())
-				r.Use(authhttphandlers.RequireAdmin(userRepository))
-				gameDataHttp.RegisterAdminGamedataRoutes(r, gamedataSvc)
+				r.Use(authhttphandlers.RequireAdmin(deps.userRepository))
+				gameDataHttp.RegisterAdminGamedataRoutes(r, deps.gamedataSvc)
 			})
 		})
 	})
@@ -372,18 +388,19 @@ func main() {
 
 	logger.Info().Msg("Rutas registradas exitosamente")
 
-	// ============================================================================
-	// INICIAR SERVIDOR HTTP
-	// ============================================================================
+	return r
+}
 
-	addr := fmt.Sprintf(":%s", port)
+// runServer inicia el servidor HTTP y bloquea hasta recibir una señal de apagado.
+// Realiza un graceful shutdown con un timeout de 30 segundos.
+func runServer(ctx context.Context, cancel context.CancelFunc, cfg *appConfig, router http.Handler, logger zerolog.Logger) {
+	addr := fmt.Sprintf(":%s", cfg.Port)
 	logger.Info().
 		Str("addr", addr).
-		Str("version", appVersion).
+		Str("version", cfg.AppVersion).
 		Msg("Servidor escuchando")
 
-	// B-01: Graceful shutdown
-	srv := &http.Server{Addr: addr, Handler: r}
+	srv := &http.Server{Addr: addr, Handler: router}
 
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -396,7 +413,7 @@ func main() {
 	<-quit
 
 	logger.Info().Msg("Señal de apagado recibida, cerrando servidor...")
-	rootCancel()
+	cancel()
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
@@ -404,6 +421,14 @@ func main() {
 		logger.Error().Err(err).Msg("Error durante el apagado del servidor")
 	}
 	logger.Info().Msg("Servidor apagado correctamente")
+}
+
+// getEnvOrDefault devuelve el valor de la variable de entorno key, o defaultVal si está vacía.
+func getEnvOrDefault(key, defaultVal string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return defaultVal
 }
 
 // generateRandomSecret generates a cryptographically random secret encoded as base64.
