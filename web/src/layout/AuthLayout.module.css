@@ -1,41 +1,85 @@
 .container {
   min-height: 100vh;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 50%, #f0fdf4 100%);
-  padding: var(--spacing-4);
+  background: #0d0d14;
+  padding: 16px;
+  font-family: 'Inter', sans-serif;
+  position: relative;
+  overflow: hidden;
+}
+
+.glow {
+  position: absolute;
+  top: -80px;
+  left: 50%;
+  translate: -50% 0;
+  width: 600px;
+  height: 360px;
+  background: radial-gradient(ellipse at 50% 0%, rgba(240 100 73 / .15) 0%, transparent 70%);
+  pointer-events: none;
 }
 
 .card {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lg);
-  padding: var(--spacing-8);
+  position: relative;
+  background: #1a1a28;
+  border: 1px solid rgba(255 255 255 / .08);
+  border-radius: 16px;
+  padding: 28px 20px;
   width: 100%;
   max-width: 400px;
+  margin-top: 16px;
+  box-shadow: 0 16px 48px rgba(0 0 0 / .5);
 }
 
 .brand {
-  text-align: center;
-  margin-bottom: var(--spacing-8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 28px;
+  text-decoration: none;
 }
 
-.brandIcon {
-  font-size: 40px;
-  display: block;
-  margin-bottom: var(--spacing-3);
+.brand:hover {
+  text-decoration: none;
+}
+
+.brandMark {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
 }
 
 .brandName {
-  font-size: var(--text-2xl);
+  font-size: 15px;
   font-weight: 700;
-  color: var(--color-text);
-  margin-bottom: var(--spacing-1);
+  color: #f1f1f5;
 }
 
-.brandTagline {
-  font-size: var(--text-sm);
-  color: var(--color-text-secondary);
+@media (min-width: 480px) {
+  .container {
+    align-items: center;
+    padding: 24px;
+  }
+
+  .card {
+    padding: 36px 32px;
+    border-radius: 20px;
+    margin-top: 0;
+  }
+
+  .brand {
+    margin-bottom: 32px;
+  }
+
+  .brandMark {
+    width: 28px;
+    height: 28px;
+  }
+
+  .brandName {
+    font-size: 16px;
+  }
 }

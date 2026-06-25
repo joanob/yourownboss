@@ -1,39 +1,107 @@
 .form {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-4);
+  gap: 14px;
 }
 
 .title {
-  font-size: var(--text-xl);
+  font-size: 18px;
   font-weight: 700;
-  color: var(--color-text);
-  margin-bottom: var(--spacing-2);
+  color: #f1f1f5;
+  margin-bottom: 4px;
   text-align: center;
 }
 
+/* Dark-theme overrides for Input component */
+.form :global(label) {
+  font-size: 13px;
+  font-weight: 500;
+  color: #8b8ba7;
+}
+
+.form :global(input) {
+  height: 44px;
+  background: #13131f;
+  border: 1px solid rgba(255 255 255 / .1);
+  border-radius: 10px;
+  color: #f1f1f5;
+  font-size: 16px; /* 16px evita zoom automático en iOS */
+  padding: 0 12px;
+}
+
+.form :global(input:focus) {
+  border-color: #f06449;
+  box-shadow: 0 0 0 3px rgba(240 100 73 / .18);
+}
+
 .error {
-  font-size: var(--text-sm);
-  color: var(--color-danger);
-  background: var(--color-danger-light);
-  border: 1px solid var(--color-danger-border);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-3) var(--spacing-4);
+  font-size: 13px;
+  color: #fca5a5;
+  background: rgba(239 68 68 / .1);
+  border: 1px solid rgba(239 68 68 / .2);
+  border-radius: 10px;
+  padding: 10px 12px;
 }
 
 .submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   width: 100%;
-  margin-top: var(--spacing-2);
+  height: 48px;
+  margin-top: 4px;
+  font-family: 'Inter', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  background: #f06449;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  /* touch-action: manipulation evita el doble-tap zoom en móvil */
+  touch-action: manipulation;
+  transition: background 140ms, box-shadow 140ms;
+  box-shadow: 0 4px 16px rgba(240 100 73 / .3);
+}
+
+.submit:active {
+  background: #d9503a;
+  box-shadow: 0 2px 8px rgba(240 100 73 / .3);
+}
+
+.submit:hover:not(:disabled) {
+  background: #d9503a;
+  box-shadow: 0 6px 20px rgba(240 100 73 / .4);
+}
+
+.submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.spinner {
+  width: 15px;
+  height: 15px;
+  border: 2px solid rgba(255 255 255 / .3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .link {
-  font-size: var(--text-sm);
-  color: var(--color-text-secondary);
+  font-size: 13px;
+  color: #6b6b8a;
   text-align: center;
 }
 
 .link a {
-  color: var(--color-primary);
+  color: #f06449;
   font-weight: 500;
   text-decoration: none;
 }

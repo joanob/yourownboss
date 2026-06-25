@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { authApi } from '@/features/auth/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { Input } from '@/components/ui/Input';
-import { Button } from '@/components/ui/Button';
 import styles from './AuthPage.module.css';
 
 export function SignupPage() {
@@ -77,9 +76,10 @@ export function SignupPage() {
 
       {error && <p className={styles.error}>{error}</p>}
 
-      <Button type="submit" isLoading={isLoading} className={styles.submit}>
+      <button type="submit" disabled={isLoading} className={styles.submit}>
+        {isLoading && <span className={styles.spinner} />}
         Crear cuenta
-      </Button>
+      </button>
 
       <p className={styles.link}>
         ¿Ya tienes cuenta?{' '}
