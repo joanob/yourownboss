@@ -1,0 +1,12 @@
+.layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.main {
+  margin-left: var(--sidebar-width);
+  flex: 1;
+  padding: var(--spacing-6);
+  min-height: 100vh;
+  max-width: calc(100vw - var(--sidebar-width));
+}
