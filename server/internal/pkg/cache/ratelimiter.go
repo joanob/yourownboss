@@ -11,14 +11,17 @@ const rateLimitWindow = time.Minute
 // RateLimiter implements an in-memory sliding-window rate limiter.
 // It tracks successful operations per (userID, action) pair.
 type RateLimiter struct {
-	mu      sync.Mutex
-	records map[string][]time.Time // key: "userID:action" → timestamps of successful ops
+	mu       sync.Mutex
+	records  map[string][]time.Time // key: "userID:action" → timestamps of successful ops
+	disabled bool                   // cuando es true, todas las comprobaciones permiten la operación
 }
 
-// NewRateLimiter creates a new RateLimiter.
-func NewRateLimiter() *RateLimiter {
+// NewRateLimiter creates a new RateLimiter. Si disabled es true, AllowAndRecord
+// y Allow siempre permiten la operación (p. ej. en el entorno de desarrollo).
+func NewRateLimiter(disabled bool) *RateLimiter {
 	return &RateLimiter{
-		records: make(map[string][]time.Time),
+		records:  make(map[string][]time.Time),
+		disabled: disabled,
 	}
 }
 
@@ -26,6 +29,9 @@ func NewRateLimiter() *RateLimiter {
 // Returns true if the operation is allowed (the operation has been counted).
 // PERF-04: combining Allow+Record in one lock avoids the TOCTOU race between two separate calls.
 func (rl *RateLimiter) AllowAndRecord(userID, action string, limit int) bool {
+	if rl.disabled {
+		return true
+	}
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
@@ -54,6 +60,9 @@ func (rl *RateLimiter) AllowAndRecord(userID, action string, limit int) bool {
 // in the last minute for the given action. It prunes stale entries on each call.
 // Prefer AllowAndRecord when the operation should be counted on the same call.
 func (rl *RateLimiter) Allow(userID, action string, limit int) bool {
+	if rl.disabled {
+		return true
+	}
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 

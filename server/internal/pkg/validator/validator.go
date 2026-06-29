@@ -6,31 +6,52 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-// CustomValidator wrapper sobre go-playground/validator
-type CustomValidator struct {
+// Validator envuelve go-playground/validator y permite omitir la validación
+// cuando skip es true (p. ej. en el entorno de desarrollo).
+type Validator struct {
 	validator *validator.Validate
+	skip      bool
 }
 
-// NewValidator crea una nueva instancia del validador
-func NewValidator() *CustomValidator {
+// New crea un validador. Si skip es true, Struct/Validate/ValidateVar no aplican
+// ninguna comprobación y siempre devuelven nil.
+func New(skip bool) *Validator {
 	v := validator.New()
 
 	// Registrar validadores personalizados
 	v.RegisterValidation("multiple_of", validateMultipleOf)
 	v.RegisterValidation("positive", validatePositive)
 
-	return &CustomValidator{
+	return &Validator{
 		validator: v,
+		skip:      skip,
 	}
 }
 
-// Validate valida un struct
-func (cv *CustomValidator) Validate(data interface{}) error {
+// NewValidator crea un validador con la validación siempre activa.
+// Conservado por compatibilidad; prefiere New(skip).
+func NewValidator() *Validator {
+	return New(false)
+}
+
+// Struct valida un struct. Devuelve nil si la validación está desactivada.
+func (cv *Validator) Struct(data interface{}) error {
+	if cv.skip {
+		return nil
+	}
 	return cv.validator.Struct(data)
 }
 
-// ValidateVar valida una variable individual
-func (cv *CustomValidator) ValidateVar(data interface{}, tag string) error {
+// Validate valida un struct (alias de Struct).
+func (cv *Validator) Validate(data interface{}) error {
+	return cv.Struct(data)
+}
+
+// ValidateVar valida una variable individual. Devuelve nil si está desactivada.
+func (cv *Validator) ValidateVar(data interface{}, tag string) error {
+	if cv.skip {
+		return nil
+	}
 	return cv.validator.Var(data, tag)
 }
 

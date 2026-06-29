@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/go-playground/validator/v10"
 	"github.com/joanob/yourownboss/internal/pkg/cache"
+	appvalidator "github.com/joanob/yourownboss/internal/pkg/validator"
 	"github.com/joanob/yourownboss/internal/users/service"
 	"github.com/rs/zerolog/log"
 )
@@ -13,12 +13,12 @@ import (
 // RegisterHandler handles user registration.
 type RegisterHandler struct {
 	userService service.UserService
-	validator   *validator.Validate
+	validator   *appvalidator.Validator
 	rateLimiter *cache.RateLimiter
 }
 
 // NewRegisterHandler creates a new register handler.
-func NewRegisterHandler(userService service.UserService, validator *validator.Validate, rateLimiter *cache.RateLimiter) *RegisterHandler {
+func NewRegisterHandler(userService service.UserService, validator *appvalidator.Validator, rateLimiter *cache.RateLimiter) *RegisterHandler {
 	return &RegisterHandler{
 		userService: userService,
 		validator:   validator,

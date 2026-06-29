@@ -2,9 +2,9 @@ package http
 
 import (
 	"github.com/go-chi/chi/v5"
-	"github.com/go-playground/validator/v10"
 	authsvc "github.com/joanob/yourownboss/internal/auth/service"
 	"github.com/joanob/yourownboss/internal/pkg/cache"
+	appvalidator "github.com/joanob/yourownboss/internal/pkg/validator"
 	usersvc "github.com/joanob/yourownboss/internal/users/service"
 )
 
@@ -13,7 +13,7 @@ func RegisterAuthRoutes(
 	router chi.Router,
 	userService usersvc.UserService,
 	authService authsvc.AuthService,
-	validator *validator.Validate,
+	validator *appvalidator.Validator,
 	rateLimiter *cache.RateLimiter,
 ) {
 	registerHandler := NewRegisterHandler(userService, validator, rateLimiter)

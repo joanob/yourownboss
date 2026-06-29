@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/go-playground/validator/v10"
+	appvalidator "github.com/joanob/yourownboss/internal/pkg/validator"
 	"github.com/joanob/yourownboss/internal/users/service"
 )
 
@@ -133,7 +133,7 @@ func TestGetMeHandler_NotFound(t *testing.T) {
 
 func TestUpdateMeHandler_Success(t *testing.T) {
 	mockUserService := &mockUserService{}
-	validator := validator.New()
+	validator := appvalidator.New(false)
 	handler := NewUpdateMeHandler(mockUserService, validator)
 
 	req := UpdateMeRequest{
@@ -154,7 +154,7 @@ func TestUpdateMeHandler_Success(t *testing.T) {
 
 func TestUpdateMeHandler_Unauthorized(t *testing.T) {
 	mockUserService := &mockUserService{}
-	validator := validator.New()
+	validator := appvalidator.New(false)
 	handler := NewUpdateMeHandler(mockUserService, validator)
 
 	req := UpdateMeRequest{
@@ -175,7 +175,7 @@ func TestUpdateMeHandler_Unauthorized(t *testing.T) {
 
 func TestUpdateMeHandler_InvalidInput(t *testing.T) {
 	mockUserService := &mockUserService{}
-	validator := validator.New()
+	validator := appvalidator.New(false)
 	handler := NewUpdateMeHandler(mockUserService, validator)
 
 	// Invalid JSON

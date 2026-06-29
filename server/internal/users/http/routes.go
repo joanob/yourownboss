@@ -2,7 +2,7 @@ package http
 
 import (
 	"github.com/go-chi/chi/v5"
-	"github.com/go-playground/validator/v10"
+	appvalidator "github.com/joanob/yourownboss/internal/pkg/validator"
 	"github.com/joanob/yourownboss/internal/users/service"
 )
 
@@ -10,7 +10,7 @@ import (
 func RegisterUsersRoutes(
 	router chi.Router,
 	userService service.UserService,
-	validator *validator.Validate,
+	validator *appvalidator.Validator,
 ) {
 	getMeHandler := NewGetMeHandler(userService)
 	updateMeHandler := NewUpdateMeHandler(userService, validator)

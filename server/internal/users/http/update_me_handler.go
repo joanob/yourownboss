@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	nativehttp "net/http"
 
-	"github.com/go-playground/validator/v10"
 	authdto "github.com/joanob/yourownboss/internal/auth/http"
+	appvalidator "github.com/joanob/yourownboss/internal/pkg/validator"
 	"github.com/joanob/yourownboss/internal/users/service"
 	"github.com/rs/zerolog/log"
 )
@@ -13,11 +13,11 @@ import (
 // UpdateMeHandler handles updating user profile.
 type UpdateMeHandler struct {
 	userService service.UserService
-	validator   *validator.Validate
+	validator   *appvalidator.Validator
 }
 
 // NewUpdateMeHandler creates a new update me handler.
-func NewUpdateMeHandler(userService service.UserService, validator *validator.Validate) *UpdateMeHandler {
+func NewUpdateMeHandler(userService service.UserService, validator *appvalidator.Validator) *UpdateMeHandler {
 	return &UpdateMeHandler{
 		userService: userService,
 		validator:   validator,

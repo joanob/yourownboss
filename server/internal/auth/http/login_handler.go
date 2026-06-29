@@ -7,19 +7,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-playground/validator/v10"
 	"github.com/joanob/yourownboss/internal/auth/service"
+	appvalidator "github.com/joanob/yourownboss/internal/pkg/validator"
 	"github.com/rs/zerolog/log"
 )
 
 // LoginHandler handles user login.
 type LoginHandler struct {
 	authService service.AuthService
-	validator   *validator.Validate
+	validator   *appvalidator.Validator
 }
 
 // NewLoginHandler creates a new login handler.
-func NewLoginHandler(authService service.AuthService, validator *validator.Validate) *LoginHandler {
+func NewLoginHandler(authService service.AuthService, validator *appvalidator.Validator) *LoginHandler {
 	return &LoginHandler{
 		authService: authService,
 		validator:   validator,

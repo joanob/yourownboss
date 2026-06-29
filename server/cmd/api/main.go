@@ -17,7 +17,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-playground/validator/v10"
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -38,6 +37,7 @@ import (
 	marketsvc "github.com/joanob/yourownboss/internal/market/service"
 	"github.com/joanob/yourownboss/internal/pkg/cache"
 	loggerutil "github.com/joanob/yourownboss/internal/pkg/logger"
+	appvalidator "github.com/joanob/yourownboss/internal/pkg/validator"
 	productionhttphandlers "github.com/joanob/yourownboss/internal/production/http"
 	productionrepo "github.com/joanob/yourownboss/internal/production/repository"
 	productionsvc "github.com/joanob/yourownboss/internal/production/service"
@@ -53,6 +53,7 @@ import (
 // appConfig contiene todos los valores de configuración validados desde variables de entorno.
 type appConfig struct {
 	AppVersion             string
+	Env                    string
 	LogLevel               string
 	DatabaseURL            string
 	JWTSecret              string
@@ -64,6 +65,12 @@ type appConfig struct {
 	SessionCleanupInterval time.Duration
 }
 
+// IsDevelopment indica si la aplicación se ejecuta en el entorno de desarrollo.
+// En desarrollo se omiten las validaciones de entrada y el rate limiter.
+func (c *appConfig) IsDevelopment() bool {
+	return strings.EqualFold(c.Env, "development")
+}
+
 // appCaches agrupa todas las cachés en memoria utilizadas por la aplicación.
 type appCaches struct {
 	gamedata    *cache.GamedataCache
@@ -73,7 +80,7 @@ type appCaches struct {
 
 // routerDeps agrupa todos los servicios y componentes necesarios para registrar las rutas HTTP.
 type routerDeps struct {
-	validate          *validator.Validate
+	validate          *appvalidator.Validator
 	jwtManager        *authcrypto.JWTManager
 	userService       usersvc.UserService
 	authService       authsvc.AuthService
@@ -125,6 +132,7 @@ func loadConfig(logger zerolog.Logger) *appConfig {
 	cfg := &appConfig{}
 
 	cfg.AppVersion = getEnvOrDefault("APP_VERSION", "0.1.0")
+	cfg.Env = getEnvOrDefault("ENV", "development")
 	cfg.LogLevel = getEnvOrDefault("LOG_LEVEL", "info")
 	cfg.DatabaseURL = getEnvOrDefault("DATABASE_URL", "./data/game.db")
 	cfg.Port = getEnvOrDefault("PORT", "8080")
@@ -185,7 +193,7 @@ func initDatabase(cfg *appConfig, logger zerolog.Logger) *sql.DB {
 func initCaches(ctx context.Context, cfg *appConfig, logger zerolog.Logger) *appCaches {
 	gamedataCache := cache.NewGamedataCache()
 	sessionCache := cache.NewSessionCache()
-	rateLimiter := cache.NewRateLimiter()
+	rateLimiter := cache.NewRateLimiter(cfg.IsDevelopment())
 
 	go startSessionCleanupRoutine(sessionCache, cfg.SessionCleanupInterval)
 	rateLimiter.StartCleanup(ctx, 5*time.Minute)
@@ -204,7 +212,7 @@ func initCaches(ctx context.Context, cfg *appConfig, logger zerolog.Logger) *app
 func buildDependencies(dbConn *sql.DB, caches *appCaches, cfg *appConfig, ctx context.Context, logger zerolog.Logger) *routerDeps {
 	logger.Info().Msg("Inicializando dependencias...")
 
-	validate := validator.New()
+	validate := appvalidator.New(cfg.IsDevelopment())
 	queries := dbqueries.New(dbConn)
 
 	jwtManager, err := authcrypto.NewJWTManager()
@@ -371,7 +379,7 @@ func buildRouter(deps *routerDeps, caches *appCaches, cfg *appConfig, dbConn *sq
 			logger.Debug().Msg("Rutas de usuarios registradas")
 
 			r.Get("/status", makeHealthHandler(dbConn))
-			companyhttphandlers.RegisterCompanyRoutes(r, deps.companyService, deps.inventoryService, cfg.InitialCompanyMoney, caches.session)
+			companyhttphandlers.RegisterCompanyRoutes(r, deps.companyService, deps.inventoryService, cfg.InitialCompanyMoney, caches.session, deps.validate)
 			markethttphandlers.RegisterMarketRoutes(r, deps.marketService, caches.rateLimiter)
 			productionhttphandlers.RegisterProductionRoutes(r, deps.productionService, caches.rateLimiter)
 			salehttphandlers.RegisterSaleRoutes(r, deps.saleService)

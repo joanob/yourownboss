@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-playground/validator/v10"
 	"github.com/joanob/yourownboss/internal/auth/service"
+	appvalidator "github.com/joanob/yourownboss/internal/pkg/validator"
 	userservice "github.com/joanob/yourownboss/internal/users/service"
 )
 
@@ -118,7 +118,7 @@ func (m *mockAuthService) Logout(ctx context.Context, sessionID string) error {
 
 func TestRegisterHandler_Success(t *testing.T) {
 	mockUserService := &mockUserService{}
-	validator := validator.New()
+	validator := appvalidator.New(false)
 	handler := NewRegisterHandler(mockUserService, validator, nil)
 
 	req := RegisterRequest{
@@ -141,7 +141,7 @@ func TestRegisterHandler_Success(t *testing.T) {
 
 func TestRegisterHandler_InvalidInput(t *testing.T) {
 	mockUserService := &mockUserService{}
-	validator := validator.New()
+	validator := appvalidator.New(false)
 	handler := NewRegisterHandler(mockUserService, validator, nil)
 
 	// Invalid JSON
@@ -159,7 +159,7 @@ func TestRegisterHandler_UsernameExists(t *testing.T) {
 	mockUserService := &mockUserService{
 		registerErr: fmt.Errorf("username already exists"),
 	}
-	validator := validator.New()
+	validator := appvalidator.New(false)
 	handler := NewRegisterHandler(mockUserService, validator, nil)
 
 	req := RegisterRequest{
@@ -186,7 +186,7 @@ func TestRegisterHandler_UsernameExists(t *testing.T) {
 
 func TestLoginHandler_Success(t *testing.T) {
 	mockAuthService := &mockAuthService{}
-	validator := validator.New()
+	validator := appvalidator.New(false)
 	handler := NewLoginHandler(mockAuthService, validator)
 
 	req := LoginRequest{
@@ -215,7 +215,7 @@ func TestLoginHandler_InvalidCredentials(t *testing.T) {
 	mockAuthService := &mockAuthService{
 		loginErr: fmt.Errorf("invalid_credentials"),
 	}
-	validator := validator.New()
+	validator := appvalidator.New(false)
 	handler := NewLoginHandler(mockAuthService, validator)
 
 	req := LoginRequest{

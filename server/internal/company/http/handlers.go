@@ -6,15 +6,18 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-playground/validator/v10"
 	"github.com/rs/zerolog/log"
 
 	"github.com/joanob/yourownboss/internal/company/models"
 	"github.com/joanob/yourownboss/internal/company/service"
 	"github.com/joanob/yourownboss/internal/pkg/cache"
+	appvalidator "github.com/joanob/yourownboss/internal/pkg/validator"
 )
 
-var validate = validator.New()
+// validate es el validador usado por los handlers de company. Se inicializa con
+// validación activa y RegisterCompanyRoutes lo reemplaza por el validador de la
+// aplicación (que puede omitir la validación en development).
+var validate = appvalidator.New(false)
 
 // errNoContext is returned when a required value is missing from the request context.
 var errNoContext = errors.New("value not in context")
